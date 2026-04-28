@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "TalkTally",
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow TalkTally to listen to your child's speech for progress tracking."
+        }
+      ]
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses the microphone to detect child vocalizations during sessions."
+      }
+    },
+    "android": {
+      "permissions": ["RECORD_AUDIO"]
+    }
+  }
+}
