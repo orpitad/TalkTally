@@ -1,19 +1,25 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/types';
 
-export const OnboardingScreen = ({ navigation }: any) => (
+type Props = {
+  navigation: StackNavigationProp<RootStackParamList, 'Onboarding'>;
+};
+
+export const OnboardingScreen = ({ navigation }: Props) => (
   <View style={styles.container}>
     <Text style={styles.step}>Step 1 of 1</Text>
     <Text style={styles.title}>How it works</Text>
     <Text style={styles.desc}>
-      1. Open the app during playtime.{"\n"}
-      2. Follow the 3-minute prompts.{"\n"}
+      1. Open the app during playtime.{'\n'}
+      2. Follow the 3-minute prompts.{'\n'}
       3. We'll track progress automatically!
     </Text>
-    
-    <TouchableOpacity 
-      style={styles.button} 
-      onPress={() => navigation.navigate('MainTabs', { screen: 'Play' })}
+
+    <TouchableOpacity
+      style={styles.button}
+      onPress={() => navigation.navigate('MainTabs')} // Home lives inside MainTabs
     >
       <Text style={styles.buttonText}>Got it!</Text>
     </TouchableOpacity>

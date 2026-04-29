@@ -1,9 +1,15 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 
-export const StyledButton = ({ title, onPress, variant = 'primary' }: any) => (
-  <TouchableOpacity 
-    style={[styles.button, variant === 'secondary' ? styles.secondary : styles.primary]} 
+interface StyledButtonProps {
+  title: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary';
+}
+
+export const StyledButton = ({ title, onPress, variant = 'primary' }: StyledButtonProps) => (
+  <TouchableOpacity
+    style={[styles.button, variant === 'secondary' ? styles.secondary : styles.primary]}
     onPress={onPress}
   >
     <Text style={styles.text}>{title}</Text>

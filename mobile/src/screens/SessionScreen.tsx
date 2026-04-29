@@ -1,71 +1,74 @@
-import React, { useEffect , useState} from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/types';
 import { useSessionStore } from '../features/useSessionStore';
 import { useVoiceDetection } from '../hooks/useVoiceDetection';
-import { AudioModule, useAudioPlayer } from 'expo-audio';
+import { useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 
-export const SessionScreen = ({ navigation }: any) => {
+type Props = {
+  navigation: StackNavigationProp<RootStackParamList, 'Session'>;
+};
+
+export const SessionScreen = ({ navigation }: Props) => {
   const { steps, currentStepIndex, nextStep, logResponse } = useSessionStore();
   const [hasStarted, setHasStarted] = useState(false);
-  
-  // 1. Initialize adaptive voice detection
-  const { 
-    isSpeaking, 
-    volume, 
-    isCalibrating, 
+  const [micError, setMicError] = useState(false);
+
+  const {
+    isSpeaking,
+    volume,
+    isCalibrating,
     isReady,
-    calibrate, 
-    startMonitoring, 
-    stopMonitoring 
+    calibrate,
+    startMonitoring,
+    stopMonitoring,
   } = useVoiceDetection(12);
-  
+
   const player = useAudioPlayer(require('../../assets/success.mp3'));
   const currentStep = steps[currentStepIndex];
 
-  // 2. Start-up Sequence: Calibrate THEN Monitor
+  // Start-up sequence: calibrate then monitor
   useEffect(() => {
     const sequence = async () => {
       try {
-        console.log('🚀 Session starting - calibrating...');
         await calibrate();
-        console.log('✅ Calibration done');
-        
-        // Add longer delay between calibration and monitoring to ensure clean state
-        console.log('⏳ Waiting for recorder to stabilize...');
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        console.log('🎙️ Starting monitoring...');
         const success = await startMonitoring();
         if (success) {
-          console.log('✨ Session ready - monitoring active');
           setHasStarted(true);
         } else {
-          console.error('❌ Failed to start monitoring');
+          setMicError(true);
         }
       } catch (err) {
-        console.error('❌ Startup sequence error:', err);
+        console.error('Startup sequence error:', err);
+        setMicError(true);
       }
     };
     sequence();
-    
+
     return () => {
       stopMonitoring();
     };
   }, []);
 
-  // 3. Monitor microphone health after full startup
+  // Monitor microphone health after full startup — show in-UI error instead of alert()
   useEffect(() => {
-    if (!hasStarted || isCalibrating) return; // Don't check until ready
-    
+    if (!hasStarted || isCalibrating) return;
+
     const checkHardware = setTimeout(() => {
       if (volume === -160 && isReady) {
-        console.warn('⚠️ Microphone not responding after startup. Volume still at -160dB');
-        console.warn(`Debug - isReady: ${isReady}, isCalibrating: ${isCalibrating}, volume: ${volume}`);
-        alert("Microphone not responding. Please check app permissions or restart the app.");
+        setMicError(true);
       }
-    }, 12000); // Wait 12 seconds total (2s calibration + 10s monitoring buffer)
+    }, 12000);
 
     return () => clearTimeout(checkHardware);
   }, [volume, hasStarted, isCalibrating, isReady]);
@@ -75,46 +78,65 @@ export const SessionScreen = ({ navigation }: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (player) player.play();
     }
-    
+
     logResponse(currentStep.id, didSpeak);
     const hasMore = nextStep();
-    
+
     if (!hasMore) {
       await stopMonitoring();
       navigation.navigate('SessionComplete');
     }
   };
 
-  // 4. Show calibration screen while calibrating
+  // Mic error state — shown in-UI instead of a blocking alert()
+  if (micError) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>🎤</Text>
+        <Text style={styles.errorTitle}>Microphone not responding</Text>
+        <Text style={styles.errorBody}>
+          Please check that the app has microphone permission in your device settings, then restart the app.
+        </Text>
+      </View>
+    );
+  }
+
+  // Calibration overlay
   if (isCalibrating) {
     return (
       <View style={styles.calibrationOverlay}>
         <ActivityIndicator size="large" color="#10B981" />
         <Text style={styles.calibTitle}>Calibrating...</Text>
-        <Text style={styles.calibSub}>Shhh! I'm checking the room noise so I can hear your child better.</Text>
+        <Text style={styles.calibSub}>
+          Shhh! I'm checking the room noise so I can hear your child better.
+        </Text>
       </View>
     );
   }
 
-  // 5. Guard: Make sure we have steps and current step
-  if (!currentStep || !steps || steps.length === 0) {
+  // Guard: ensure steps are loaded
+  if (!currentStep || steps.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Error: No session steps loaded</Text>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>No session steps loaded</Text>
+        <Text style={styles.errorBody}>Please go back and start a new session.</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ... (Your existing progress bar and header JSX) */}
       <View style={styles.header}>
-         <Text style={styles.counterText}>PROMPT {currentStepIndex + 1} OF {steps.length}</Text>
-         <View style={styles.visualizer}>
-            <View style={[styles.indicatorPill, isSpeaking && styles.indicatorPillActive]}>
-                <Text style={styles.indicatorText}>{isSpeaking ? "🗣️ I HEAR YOU!" : "👂 LISTENING..."}</Text>
-            </View>
-         </View>
+        <Text style={styles.counterText}>
+          PROMPT {currentStepIndex + 1} OF {steps.length}
+        </Text>
+        <View style={styles.visualizer}>
+          <View style={[styles.indicatorPill, isSpeaking && styles.indicatorPillActive]}>
+            <Text style={styles.indicatorText}>
+              {isSpeaking ? '🗣️ I HEAR YOU!' : '👂 LISTENING...'}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.mainCard}>
@@ -125,6 +147,10 @@ export const SessionScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.primaryBtn} onPress={() => handleAction(true)}>
           <Text style={styles.primaryBtnText}>Child Responded</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryBtn} onPress={() => handleAction(false)}>
+          <Text style={styles.secondaryBtnText}>No response — skip</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -132,26 +158,56 @@ export const SessionScreen = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  progressWrapper: { height: 6, backgroundColor: '#E2E8F0', width: '100%' },
-  progressBar: { height: '100%', backgroundColor: '#10B981' },
   header: { padding: 20, alignItems: 'center' },
   counterText: { fontSize: 12, fontWeight: '900', color: '#94A3B8', letterSpacing: 1.5 },
   visualizer: { height: 140, justifyContent: 'center', alignItems: 'center', width: '100%' },
-  pulseCircle: { position: 'absolute', width: 85, height: 85, borderRadius: 45, backgroundColor: '#10B981', opacity: 0.2 },
-  indicatorPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 30, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
+  indicatorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 30,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
   indicatorPillActive: { backgroundColor: '#D1FAE5', borderColor: '#10B981', borderWidth: 1 },
-  indicatorEmoji: { fontSize: 18, marginRight: 8 },
   indicatorText: { fontSize: 13, fontWeight: '800', color: '#475569' },
-  mainCard: { flex: 1, marginHorizontal: 25, backgroundColor: '#FFF', borderRadius: 28, padding: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 15 },
-  instructionText: { fontSize: 32, fontWeight: '900', textAlign: 'center', color: '#1E293B', lineHeight: 42 },
-  errorText: { fontSize: 16, color: '#DC2626', textAlign: 'center' },
-  coachBox: { marginTop: 30, backgroundColor: '#F0F9FF', padding: 15, borderRadius: 18, width: '100%' },
-  coachTitle: { fontSize: 10, fontWeight: '900', color: '#0369A1', marginBottom: 4 },
-  coachText: { fontSize: 14, color: '#0C4A6E', lineHeight: 20 },
+  mainCard: {
+    flex: 1,
+    marginHorizontal: 25,
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    padding: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+  },
+  instructionText: {
+    fontSize: 32,
+    fontWeight: '900',
+    textAlign: 'center',
+    color: '#1E293B',
+    lineHeight: 42,
+  },
   footer: { padding: 25, gap: 12 },
-  primaryBtn: { backgroundColor: '#10B981', height: 80, borderRadius: 22, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#10B981', shadowOpacity: 0.2, shadowRadius: 10 },
+  primaryBtn: {
+    backgroundColor: '#10B981',
+    height: 80,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
   primaryBtnText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  subBtnText: { color: '#D1FAE5', fontSize: 12, fontWeight: '600' },
   secondaryBtn: { padding: 12, alignItems: 'center' },
   secondaryBtnText: { color: '#94A3B8', fontSize: 15, fontWeight: '700' },
   calibrationOverlay: {
@@ -170,6 +226,27 @@ const styles = StyleSheet.create({
   },
   calibSub: {
     fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: { fontSize: 48, marginBottom: 16 },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorBody: {
+    fontSize: 15,
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,

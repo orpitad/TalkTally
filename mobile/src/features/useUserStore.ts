@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface UserState {
   hasCompletedOnboarding: boolean;
@@ -7,9 +9,17 @@ interface UserState {
   setUserName: (name: string) => void;
 }
 
-export const useUserStore = create<UserState>((set) => ({
-  hasCompletedOnboarding: false,
-  userName: '',
-  setHasCompletedOnboarding: (val) => set({ hasCompletedOnboarding: val }),
-  setUserName: (name) => set({ userName: name }),
-}));
+export const useUserStore = create<UserState>()(
+  persist(
+    (set) => ({
+      hasCompletedOnboarding: false,
+      userName: '',
+      setHasCompletedOnboarding: (val) => set({ hasCompletedOnboarding: val }),
+      setUserName: (name) => set({ userName: name }),
+    }),
+    {
+      name: 'talk-tally-user',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
