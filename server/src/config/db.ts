@@ -1,19 +1,21 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// Only load .env file in local development
+// On Railway, variables are injected directly into process.env
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = require('dotenv');
+  dotenv.config();
+}
 
-// Log what Railway is injecting so we can debug connection issues
 console.log('DB Config:', {
-  host: process.env.PGHOST,
-  port: process.env.PGPORT,
-  database: process.env.PGDATABASE,
-  user: process.env.PGUSER,
+  host:           process.env.PGHOST,
+  port:           process.env.PGPORT,
+  database:       process.env.PGDATABASE,
+  user:           process.env.PGUSER,
   hasDatabaseUrl: !!process.env.DATABASE_URL,
+  nodeEnv:        process.env.NODE_ENV,
 });
 
-// Use DATABASE_URL if available (Railway injects this), 
-// otherwise fall back to individual variables for local dev
 export const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -25,10 +27,8 @@ export const pool = process.env.DATABASE_URL
       database: process.env.PGDATABASE || 'talktally',
       user:     process.env.PGUSER     || 'postgres',
       password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || '',
-      ssl: false,
     });
 
-// Run schema on startup — idempotent, safe to run multiple times
 export const initDb = async (): Promise<void> => {
   try {
     await pool.query(`

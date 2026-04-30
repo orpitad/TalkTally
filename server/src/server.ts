@@ -1,11 +1,14 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { pool, initDb } from './config/db';
 import sessionRoutes from './routes/sessionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
-dotenv.config();
+// Only load .env in local development — Railway injects vars directly
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = require('dotenv');
+  dotenv.config();
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,10 +23,9 @@ app.get('/health', (_req, res) => {
 app.use('/sessions', sessionRoutes);
 app.use(errorHandler);
 
-// Initialize DB schema then start server
 const start = async () => {
   try {
-    await initDb(); // creates tables if they don't exist
+    await initDb();
     app.listen(PORT, () => {
       console.log(`🚀 TalkTally server running on port ${PORT}`);
     });
