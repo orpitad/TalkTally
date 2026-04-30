@@ -1,21 +1,51 @@
 {
   "expo": {
     "name": "TalkTally",
+    "slug": "talktally",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FAFC"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.orpita91.talktally",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "TalkTally uses the microphone to detect when your child speaks during a session."
+      }
+    },
+    "android": {
+      "package": "com.orpita91.talktally",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F8FAFC"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
     "plugins": [
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow TalkTally to listen to your child's speech for progress tracking."
+          "microphonePermission": "TalkTally uses the microphone to detect when your child speaks during a session."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-asset"
     ],
-    "ios": {
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app uses the microphone to detect child vocalizations during sessions."
+    "extra": {
+      "eas": {
+        "projectId": "4fc0e69d-0f6d-4394-b12b-d75658ee05e5"
       }
     },
-    "android": {
-      "permissions": ["RECORD_AUDIO"]
-    }
+    "owner": "orpita91"
   }
 }

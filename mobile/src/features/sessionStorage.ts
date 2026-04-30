@@ -1,33 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 1. Define the shape of a single History record
 export interface SessionRecord {
   id: string;
   date: string;
   accuracy: number;
   totalSteps: number;
+  synced: boolean;
 }
 
-// 2. The key must match what we use in useSessionStore.ts
 const HISTORY_KEY = 'talk-tally-history';
 
-/**
- * Retrieves all saved sessions from the phone's local storage.
- * Used by the HistoryScreen to display progress over time.
- */
 export const getHistory = async (): Promise<SessionRecord[]> => {
   try {
     const jsonValue = await AsyncStorage.getItem(HISTORY_KEY);
     return jsonValue != null ? JSON.parse(jsonValue) : [];
   } catch (e) {
-    console.error('Failed to load history from storage:', e);
+    console.error('Failed to load history:', e);
     return [];
   }
 };
 
 /**
- * Utility to completely clear history if the user wants a fresh start.
+ * Flips synced: true for a session by its local ID.
+ * Called after a successful POST to the backend.
  */
+export const markSessionSynced = async (localId: string): Promise<void> => {
+  try {
+    const history = await getHistory();
+    const updated = history.map((s) =>
+      s.id === localId ? { ...s, synced: true } : s
+    );
+    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to mark session as synced:', e);
+  }
+};
+
 export const clearHistory = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem(HISTORY_KEY);

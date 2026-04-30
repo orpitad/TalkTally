@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/types';
-import { getNextRecommendation } from '../features/recommendationEngine';
+import {
+  getNextRecommendation,
+  Recommendation,
+} from '../features/recommendationEngine';
 import { useIsFocused } from '@react-navigation/native';
 import { useSessionStore } from '../features/useSessionStore';
-import { TODDLER_SESSION_STEPS } from '../features/sessionData';
 
-// Home lives inside MainTabs, so its navigation prop reaches the root stack
-// via the parent navigator — use StackNavigationProp with the root param list
 type Props = {
   navigation: StackNavigationProp<RootStackParamList>;
 };
@@ -21,9 +21,10 @@ const getGreeting = () => {
 };
 
 export const HomeScreen = ({ navigation }: Props) => {
-  const [rec, setRec] = useState<any>(null);
+  const [rec, setRec] = useState<Recommendation | null>(null);
   const isFocused = useIsFocused();
-  const { currentStepIndex, sessionResults, resetSession, setSteps } = useSessionStore();
+  const { currentStepIndex, sessionResults, resetSession, setSteps } =
+    useSessionStore();
 
   const isResuming = currentStepIndex > 0 && sessionResults.length > 0;
 
@@ -38,7 +39,8 @@ export const HomeScreen = ({ navigation }: Props) => {
       navigation.navigate('Session');
     } else {
       resetSession();
-      setSteps(TODDLER_SESSION_STEPS);
+      // Use the recommended steps — not a hardcoded default
+      if (rec) setSteps(rec.steps);
       navigation.navigate('Session');
     }
   };
@@ -52,6 +54,12 @@ export const HomeScreen = ({ navigation }: Props) => {
           <View style={styles.badge}>
             <Text style={styles.badgeText}>SMART SUGGESTION</Text>
           </View>
+
+          {/* Session type pill */}
+          <View style={styles.typePill}>
+            <Text style={styles.typePillText}>{rec.sessionType}</Text>
+          </View>
+
           <Text style={styles.recTitle}>{rec.title}</Text>
           <Text style={styles.recReason}>{rec.reason}</Text>
 
@@ -96,9 +104,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   badgeText: { color: '#6366F1', fontSize: 10, fontWeight: '900' },
+  typePill: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  typePillText: { color: '#166534', fontSize: 11, fontWeight: '700' },
   recTitle: {
     fontSize: 24,
     fontWeight: '800',
