@@ -3,14 +3,32 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Railway injects this automatically
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false,
+// Log what Railway is injecting so we can debug connection issues
+console.log('DB Config:', {
+  host: process.env.PGHOST,
+  port: process.env.PGPORT,
+  database: process.env.PGDATABASE,
+  user: process.env.PGUSER,
+  hasDatabaseUrl: !!process.env.DATABASE_URL,
 });
 
-// Run schema on startup — idempotent (safe to run multiple times)
+// Use DATABASE_URL if available (Railway injects this), 
+// otherwise fall back to individual variables for local dev
+export const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    })
+  : new Pool({
+      host:     process.env.PGHOST     || 'localhost',
+      port:     Number(process.env.PGPORT) || 5432,
+      database: process.env.PGDATABASE || 'talktally',
+      user:     process.env.PGUSER     || 'postgres',
+      password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || '',
+      ssl: false,
+    });
+
+// Run schema on startup — idempotent, safe to run multiple times
 export const initDb = async (): Promise<void> => {
   try {
     await pool.query(`
