@@ -1,0 +1,93 @@
+# TalkTally — Security & Access Document
+
+## Overview
+TalkTally prioritizes user privacy and data security while maintaining simplicity for caregivers. This document explains authentication, authorization, data protection, permissions, and incident response for TalkTally.
+
+## Authentication & Authorization
+### Device-Based Authentication (MVP)
+- On first launch the app generates a UUID v4 and stores it locally (AsyncStorage or SecureStore).
+- This deviceId is sent with API requests to associate sessions to a device.
+- No username/password in MVP — anonymous tracking only.
+
+### Future: Account & Family Sharing
+- Phase 2 will provide optional account creation (email + password) and family sharing with proper authentication (bcrypt hashed passwords, JWT or session tokens).
+
+## Data Classification & Handling
+### Data Collected
+- Device ID (UUID) — Stored locally and on server for mapping sessions
+- Session metadata — accuracy, total_steps, session_number, completed_at
+- App version & OS type for analytics
+
+### Data Not Collected (MVP)
+- No personally-identifiable information (PII): names, emails, phone numbers
+- Audio recordings are never uploaded to the server (device-only)
+
+### Storage & Retention
+- Server: session metadata retained 24 months by default; policy may be configurable
+- Device: recordings and profile data stored on-device; user controls retention
+
+## Permissions & Runtime Handling
+### Microphone Permission
+- iOS: NSMicrophoneUsageDescription in Info.plist with clear rationale
+- Android: RECORD_AUDIO in AndroidManifest
+- Request flow: requestRecordingPermissionsAsync() is called at calibration time; if denied, present a rationale and link to settings
+
+### Storage Permission (if needed)
+- If the app writes to shared storage or external directories on Android, request WRITE_EXTERNAL_STORAGE as required, with clear rationale
+
+## Audio Handling & Security
+- Audio recordings remain on-device and are saved in the app's private data directory
+- Audio is not uploaded to any server in MVP; any future cloud backup is opt-in and encrypted in transit (TLS) and at rest
+
+## Network & Data Transmission
+- All backend communication occurs over HTTPS (TLS 1.2+)
+- Backend hosted on Railway provides managed SSL certificates
+- API endpoints: GET /health, POST /sessions, GET /sessions?deviceId=...
+
+## Backend Security
+- Use parameterized queries with pg to prevent SQL injection
+- Limit returned data to the deviceId requested
+- Enforce validation of deviceId format (UUID) on server-side
+- Consider rate limiting on per-device basis (Phase 2)
+
+## Database Security & Schema
+- users table stores device_id (unique)
+- sessions table stores per-session metadata and references users(device_id)
+- Index sessions on device_id for efficient lookup
+
+## Access Control
+- No user accounts in MVP; deviceId acts as the access key for session retrieval
+- For future authenticated accounts, implement RBAC and session ownership checks
+
+## Logging & Monitoring
+- Avoid logging sensitive data (deviceId considered non-PII but treated carefully)
+- Log errors and server events; redact any potential PII
+- Future: integrate with Sentry (mobile & backend) for crash reporting
+
+## Incident Response
+1. Contain: Isolate affected services
+2. Assess: Determine scope and user impact
+3. Notify: Follow regulatory timelines (GDPR 72-hour rule if applicable)
+4. Remediate: Apply fixes, rotate secrets if needed
+5. Post-Mortem: Publish findings and action items
+
+## Compliance
+- GDPR: minimal personal data collection, provide privacy policy and deletion options in future
+- CCPA: allow users to request data deletion/exports (Phase 2)
+- COPPA: app targets caregivers; do not collect child PII or upload audio. If future features collect child PII, add parental consent flows.
+
+## Secure Development Practices
+- Do not store secrets in repository; use environment variables in Railway
+- Run dependency audits (npm audit) and keep dependencies up to date
+- Use CI checks for linting and TypeScript type safety
+
+## Future Security Enhancements (Roadmap)
+- Use expo-secure-store or Keychain for deviceId storage
+- Certificate pinning and request signing
+- Rate limiting and IP-based anomaly detection
+- Encryption of audio at rest (optional, user-configurable)
+- Penetration testing and third-party security audit
+
+---
+
+Contact: security@talktally.dev
