@@ -1,0 +1,264 @@
+# TalkTally — Backend Specification
+
+## Overview
+This document describes the backend architecture, API contract, database schema, operational concerns, security expectations, testing strategy, and deployment guidance for the TalkTally server.
+
+Target audience: backend engineers, DevOps, QA.
+
+---
+
+## Goals
+- Provide a minimal, secure, and reliable REST API for session metadata ingestion and retrieval
+- Keep the API simple for mobile clients (low bandwidth, robust to retries)
+- Enforce validation to avoid corrupt or malformed data
+- Provide maintainable code structure with tests and CI
+
+---
+
+## Tech Stack
+- Node.js (>=18) with TypeScript
+- Express 4.x
+- PostgreSQL (12+)
+- pg Node client
+- ts-node-dev for development; tsc for build
+- Hosting: Railway (or any managed node host)
+
+---
+
+## Environment Variables
+- NODE_ENV=production|development
+- PORT (default 3000)
+- DATABASE_URL (preferred) or PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
+- SENTRY_DSN (optional)
+- LOG_LEVEL (optional)
+
+---
+
+## Project Layout (server/src)
+- server.ts — app entry, middleware, and startup
+- routes/
+  - sessionRoutes.ts — routes for /sessions
+- controllers/
+  - sessionController.ts — request handlers and orchestration
+- services/
+  - sessionService.ts — DB operations, validation helpers
+- middleware/
+  - errorHandler.ts — centralized error responses
+  - validateRequest.ts — request schema validation helper
+- config/
+  - db.ts — pg pool and initDb/schema migration helper
+- types/
+  - index.ts — shared TypeScript interfaces
+- tests/
+  - integration/ and unit/
+
+---
+
+## API Contract
+All endpoints accept and return JSON. TLS required in production.
+
+1) Health check
+- Method: GET
+- Path: /health
+- Response: 200 { status: 'ok' }
+
+2) Create session
+- Method: POST
+- Path: /sessions
+- Request body (application/json):
+  {
+    "deviceId": string (UUID v4),
+    "sessionNumber": integer (1-15),
+    "totalSteps": integer (>0),
+    "correctSteps": integer (>=0, <= totalSteps),
+    "accuracy": integer (0-100) OPTIONAL (server can compute),
+    "durationSeconds": integer OPTIONAL,
+    "metadata": object OPTIONAL (free-form for future fields)
+  }
+
+- Responses:
+  - 201 Created
+    {
+      "id": number,
+      "deviceId": string,
+      "sessionNumber": number,
+      "accuracy": number,
+      "totalSteps": number,
+      "completedAt": string (ISO timestamp)
+    }
+  - 400 Bad Request — invalid payload
+  - 500 Internal Server Error
+
+Notes: The server should compute and validate accuracy if not provided: Math.round((correctSteps / totalSteps) * 100)
+
+3) List sessions
+- Method: GET
+- Path: /sessions?deviceId=UUID&limit=50&since=ISO_DATE
+- Response 200
+  {
+    "deviceId": string,
+    "totalSessions": number,
+    "averageAccuracy": number,
+    "sessions": [
+      { id, sessionNumber, accuracy, totalSteps, completedAt }
+    ]
+  }
+- 400 if deviceId missing/invalid
+
+---
+
+## Validation Rules
+- deviceId: required, must be UUID v4 format
+- sessionNumber: integer in allowed range (1..15)
+- totalSteps: integer > 0
+- correctSteps: integer >=0 and <= totalSteps
+- accuracy: optional, if provided must be 0..100; otherwise computed
+
+Use a validation library (zod or joi) in validateRequest middleware.
+
+---
+
+## Database Schema
+Use migrations (preferred) or schema init on startup for MVP. Example SQL:
+
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  device_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id SERIAL PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  session_number INTEGER NOT NULL,
+  accuracy INTEGER NOT NULL,
+  correct_steps INTEGER NOT NULL,
+  total_steps INTEGER NOT NULL,
+  duration_seconds INTEGER,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT fk_device FOREIGN KEY (device_id)
+    REFERENCES users (device_id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_device_id ON sessions (device_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_completed_at ON sessions (completed_at DESC);
+
+Notes:
+- Store device_id as TEXT for simplicity; if privacy requires, consider hashing/pseudonymizing
+- metadata stored as JSONB for extensibility
+
+---
+
+## Database Access Patterns
+- Insert user if not exists (INSERT ... ON CONFLICT DO NOTHING)
+- Insert session (single-row insert)
+- Query last N sessions by device_id ORDER BY completed_at DESC LIMIT :limit
+- Aggregate: AVG(accuracy) for device-specific stats
+
+Use prepared statements / parameterized queries via pg to prevent SQL injection.
+
+---
+
+## Controllers & Service Responsibilities
+- Controller: parse request, validate, call service, map service errors to HTTP responses
+- Service: business logic and DB operations
+  - ensureUserExists(deviceId)
+  - createSession(payload)
+  - getSessions(deviceId, { limit, since })
+
+Error handling:
+- Use try/catch in controllers; throw typed errors from service (ValidationError, NotFoundError)
+- errorHandler middleware maps known errors to 4xx and logs details for 5xx
+
+---
+
+## Security
+- Enforce HTTPS in production
+- Validate and sanitize all inputs
+- Use parameterized queries for DB access
+- Limit returned fields — do not expose internal IDs or secrets
+- Consider rate limiting per deviceId (e.g., 100 requests / 15 min) to prevent abuse
+- Use environment variables for credentials; never commit secrets
+
+---
+
+## Observability & Monitoring
+- Logs: structured JSON logs in production (timestamp, level, context, message)
+- Metrics: session creation rate, error rate, response latency
+- Integrate Sentry for exceptions and optionally Datadog for metrics/tracing
+- Health endpoint for uptime checks
+
+---
+
+## Testing Strategy
+Unit tests
+- Validate sessionService logic (accuracy calc, DB query building)
+- Validation schemas
+
+Integration tests
+- Run against ephemeral Postgres (e.g., Testcontainers or a separate test DB)
+- Test POST /sessions and GET /sessions flows including edge cases (invalid payload, missing device)
+
+E2E tests
+- Optional: run with full stack and mock mobile client
+
+CI
+- On PR: run TypeScript compile, ESLint, unit tests, and integration tests (if feasible)
+
+---
+
+## Deployment
+- Use Railway or other PaaS for hosting
+- Dockerfile (optional) for containerized deployment
+- Use NODE_ENV=production and DATABASE_URL in environment
+- On startup initDb() should run migrations or ensure schema exists (but prefer a proper migration tool like node-pg-migrate or Flyway)
+
+Example Dockerfile (simple):
+
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json tsconfig*.json ./
+RUN npm ci --production
+COPY dist ./dist
+CMD ["node", "dist/server.js"]
+
+---
+
+## Operational Runbook (MVP)
+- Restart service: docker restart or Railway redeploy
+- Database connection errors: check DATABASE_URL and network connectivity, check pool size
+- Backup DB regularly using managed provider's backups
+- Scaling: increase app instances and DB plan when session ingestion increases
+
+---
+
+## Sample Requests
+Create session (curl):
+
+curl -X POST https://api.talktally.app/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deviceId":"550e8400-e29b-41d4-a716-446655440000",
+    "sessionNumber":1,
+    "totalSteps":5,
+    "correctSteps":4
+  }'
+
+List sessions:
+curl "https://api.talktally.app/sessions?deviceId=550e8400-e29b-41d4-a716-446655440000&limit=20"
+
+---
+
+## Future Enhancements
+- Authentication & accounts (JWT) for family sharing
+- Row-level security (RLS) policies in Postgres tied to authenticated users
+- Rate limiting and abuse detection
+- Async batch inserts and background workers for heavy processing
+- Add migrations via a proper migration tool
+- Add feature flagging and canary deploys
+
+---
+
+Contact: backend@talktally.dev
