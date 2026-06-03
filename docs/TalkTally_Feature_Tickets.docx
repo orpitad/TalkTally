@@ -1,0 +1,172 @@
+# TalkTally — Feature Ticket List
+
+This document contains the prioritized feature tickets for the TalkTally project, with summary, acceptance criteria, priority, and rough estimates. Use these as the source for GitHub issues or your project tracker.
+
+---
+
+1) Fix: Robust microphone calibration & monitoring
+- Summary: Ensure prepareToRecordAsync() is called, permissions handled correctly, calibration stops recording, monitoring starts reliably, and meter values are accurate.
+- Acceptance Criteria:
+  - Calibration completes within 3 seconds in a normal environment
+  - Metering returns values > -160 dB when ambient noise present
+  - Monitoring starts and sets isReady = true
+  - No overlapping recordings between calibration and monitoring
+  - Unit/integration tests for calibration and monitoring lifecycle
+- Priority: Critical
+- Estimate: 2 days
+
+---
+
+2) Fix: Load session steps on start
+- Summary: HomeScreen must populate steps into useSessionStore (setSteps) before navigating to Session to avoid blank screen.
+- Acceptance Criteria:
+  - Starting a new session always shows first step
+  - Edge cases: recommendation null → fallback to default session steps
+  - Unit tests for HomeScreen behavior
+- Priority: Critical
+- Estimate: 0.5 day
+
+---
+
+3) Improve error handling & user messages
+- Summary: Add guard screens and clear UX flows for permission denial, mic health check failures, missing steps, and calibration errors.
+- Acceptance Criteria:
+  - Permission denied shows screen with steps to enable microphone in settings
+  - Mic health check triggers only after calibration and appropriate delay
+  - No steps loaded shows actionable message and button to re-initialize
+  - ErrorBoundary catches render-time exceptions and allows retry
+- Priority: High
+- Estimate: 1 day
+
+---
+
+4) Local audio storage & configurable cleanup
+- Summary: Ensure recordings are saved via recordingService, track them in sessionStorage, and implement configurable cleanup policy (default: 7 days).
+- Acceptance Criteria:
+  - Recordings are saved to app private directory and associated with sessionId + stepId
+  - Cleanup job removes recordings older than retention window
+  - User can manually delete recordings from History screen
+  - Tests for save/delete functions
+- Priority: Medium
+- Estimate: 1.5 days
+
+---
+
+5) Backend session API hardening & DB improvements
+- Summary: Add input validation, database constraints, indices, and prepare for RLS if future auth is added.
+- Acceptance Criteria:
+  - POST /sessions validates payload and returns 400 for invalid input
+  - GET /sessions requires deviceId parameter and validates UUID format
+  - DB has index on sessions(device_id); schema migration script present
+  - Add integration tests for endpoints using a test DB
+- Priority: High
+- Estimate: 2 days
+
+---
+
+6) Recommendation engine improvements
+- Summary: Tune thresholds, avoid repeating sessions recently run, and consider recency/accuracy weighting.
+- Acceptance Criteria:
+  - Recommendations avoid suggesting any of the last 3 sessions (if alternatives exist)
+  - If average accuracy >= 70%, recommend next level; if <60% recommend repeat/practice items
+  - Unit tests for decision logic
+- Priority: Medium
+- Estimate: 1 day
+
+---
+
+7) Analytics instrumentation
+- Summary: Track key events locally and forward in production (configurable provider), keep payload minimal and privacy-safe.
+- Acceptance Criteria:
+  - Events tracked: app_opened, session_started, session_completed, calibration_failed, session_synced
+  - Dev logs only in non-production; production forwards to provider when configured
+  - Analytics configuration documented and feature-flagged
+- Priority: Low
+- Estimate: 0.5 day
+
+---
+
+8) Accessibility improvements
+- Summary: Ensure a11y for screen readers, color contrast, and touch targets.
+- Acceptance Criteria:
+  - All interactive elements have accessibilityLabel
+  - Buttons meet 44x44pt minimum
+  - Color contrast passes WCAG AA for primary text
+  - Reduced motion preference respected (no pulsing animations)
+- Priority: Medium
+- Estimate: 1 day
+
+---
+
+9) CI / lint / tests
+- Summary: Configure GitHub Actions to run TypeScript checks, ESLint, and unit tests on PRs.
+- Acceptance Criteria:
+  - PRs must pass TypeScript compile and ESLint before merge
+  - Basic unit tests run in CI
+  - Lint rules and tsconfig documented
+- Priority: High
+- Estimate: 2 days
+
+---
+
+10) Offline-first sync & retry logic
+- Summary: Ensure session uploads queue when offline and retry automatically when network restored; expose manual retry in UI.
+- Acceptance Criteria:
+  - Sessions created offline are persisted and flagged as pending
+  - App retries upload when network is restored (exponential backoff)
+  - UI shows status (pending, synced, failed) on History and session list
+- Priority: High
+- Estimate: 2 days
+
+---
+
+11) Optional: Encrypted cloud backup for recordings (opt-in)
+- Summary: Allow users to opt-in to encrypted cloud backup of recordings (user-consent flow required).
+- Acceptance Criteria:
+  - User explicitly opts into backup; consent recorded
+  - Uploads are encrypted in transit (TLS) and at rest (provider encryption) and tied to account or token
+  - User can disable and delete backups
+- Priority: Low (future) 
+- Estimate: 5 days
+
+---
+
+12) UX polish & localization
+- Summary: Add microcopy improvements, localized strings (i18n), and small UI polish per design feedback.
+- Acceptance Criteria:
+  - Strings extracted to i18n files
+  - English + one additional language added (e.g., Spanish)
+  - No layout regressions in translated UIs
+- Priority: Low
+- Estimate: 3 days
+
+---
+
+13) Rate-limiting & abuse protection (server)
+- Summary: Add rate-limiting middleware to backend to prevent abuse and accidental DoS.
+- Acceptance Criteria:
+  - Limit requests per deviceId (e.g., 100 reqs per 15 min)
+  - Return 429 when limit exceeded
+  - Configurable via env
+- Priority: Medium
+- Estimate: 1 day
+
+---
+
+14) Telemetry & crash reporting
+- Summary: Integrate Sentry for mobile and server to capture crashes and errors in production.
+- Acceptance Criteria:
+  - Mobile reports crashes with stack traces, device, OS version, and app version (no PII)
+  - Backend reports uncaught exceptions and unhandled promise rejections
+  - Alerts configured for critical error rates
+- Priority: Medium
+- Estimate: 1.5 days
+
+---
+
+Guidance for creating GitHub issues from these tickets:
+- Use the ticket title as the issue title
+- Include the Acceptance Criteria section as checklist items in the issue body
+- Tag with labels: priority (critical/high/medium/low), area (mobile/backend/frontend/security/devops)
+- Assign an initial estimate using the Estimate field (in days)
+
