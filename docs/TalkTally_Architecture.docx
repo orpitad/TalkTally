@@ -1,0 +1,48 @@
+# TalkTally — Technical Architecture
+
+## System Overview
+TalkTally consists of a React Native mobile app (Expo) for caregivers and a lightweight Express backend with a PostgreSQL database. The mobile app performs audio calibration and voice detection on-device, stores recordings locally, and uploads session metadata to the server.
+
+## Components
+- Mobile App (Expo / React Native)
+  - useVoiceDetection hook: calibration, metering, threshold
+  - Session screens: prompts, timers, recording management
+  - Local persistence: AsyncStorage for deviceId, session queue
+- Backend (Express + TypeScript)
+  - Routes: POST /sessions, GET /sessions, GET /health
+  - Controllers: validate and persist session metadata
+  - Database: PostgreSQL (users, sessions)
+- Hosting & Infrastructure
+  - Backend: Railway (auto SSL), environment variables for DB
+  - Database: Railway Postgres
+
+## Data Flow
+1. User starts session on mobile → App calibrates microphone
+2. On step prompts, app monitors audio, records local audio when child speaks
+3. After session complete, app computes accuracy and posts session summary to POST /sessions with deviceId
+4. Backend validates and stores metadata in sessions table tied to device_id
+5. History screen fetches sessions via GET /sessions?deviceId=...
+
+## Database Schema (summary)
+- users (id PK, device_id TEXT UNIQUE, created_at TIMESTAMPTZ)
+- sessions (id PK, device_id TEXT FK → users.device_id, accuracy INTEGER, total_steps INTEGER, completed_at TIMESTAMPTZ)
+- Index: idx_sessions_device_id ON sessions(device_id)
+
+## Deployment & Environment
+- Development: local Postgres, ts-node-dev for backend, Expo dev server for mobile
+- Production: Railway for backend and Postgres, Expo builds for mobile releases
+- Environment variables required: DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE/PGPORT, NODE_ENV, PORT
+
+## Monitoring & Observability
+- Server logs to console; plan integration with Sentry/Datadog
+- Mobile: structured logger utility; plan integration with Sentry for crash reporting
+
+## Security Considerations
+- Use parameterized queries (pg) to avoid SQL injection
+- Enforce HTTPS for all endpoints; Railway provides managed SSL
+- Device ID used as anonymous identifier; do not treat as PII
+
+## Diagram (ASCII)
+Mobile (Expo) --HTTPS--> Express API --SQL--> PostgreSQL (Railway)
+
+(See repository docs folder for additional textual diagrams and implementation notes.)
