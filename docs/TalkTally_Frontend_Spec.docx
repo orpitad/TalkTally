@@ -1,0 +1,148 @@
+# TalkTally — Frontend Specification
+
+## Overview
+This document describes the frontend architecture, component boundaries, key hooks, UX requirements, accessibility considerations, and testing guidance for the TalkTally mobile app.
+
+### Purpose
+Provide clear implementation guidance for mobile engineers, QA, and designers to maintain consistent behavior across screens, ensure robust voice detection, and keep the app accessible and maintainable.
+
+## Tech Stack
+- React Native 0.81.5
+- Expo SDK 54
+- TypeScript 5.x
+- React Navigation (stack + bottom tabs)
+- Zustand for state management
+- Expo Audio for recording and metering
+- AsyncStorage for local persistence
+
+## Project Structure (mobile/src)
+- screens/
+  - LandingScreen.tsx
+  - OnboardingScreen.tsx
+  - HomeScreen.tsx
+  - SessionScreen.tsx
+  - SessionCompleteScreen.tsx
+  - HistoryScreen.tsx
+- navigation/
+  - RootNavigator.tsx
+  - MainTabs.tsx
+  - types.ts
+- components/
+  - ErrorBoundary.tsx
+  - StyledButton.tsx
+  - [reusable UI components]
+- hooks/
+  - useVoiceDetection.ts
+- features/
+  - sessionData.ts
+  - useSessionStore.ts
+  - sessionStorage.ts
+  - recommendationEngine.ts
+- services/
+  - logger.ts
+  - analytics.ts
+  - recordingService.ts
+  - api.ts
+- theme/
+  - theme.ts
+
+## Key Components & Responsibilities
+- HomeScreen
+  - Show recommendation card
+  - Start/resume session
+  - Display last accuracy badge and progress
+- SessionScreen
+  - Drive calibration, monitoring, and recording lifecycle
+  - Show prompt, tip, progress bar, timer, and recording indicator
+  - Handle user action (Child Responded / No Response)
+  - Save recordings locally and log responses in store
+- HistoryScreen
+  - List past sessions, accuracy, and allow playback of local recordings
+- ErrorBoundary
+  - Catch rendering errors and present retry UI
+
+## Core Hook: useVoiceDetection
+Purpose: encapsulate audio setup, calibration, metering, and monitoring to expose a simple API to screens.
+
+API surface:
+- isSpeaking: boolean
+- volume: number (dB)
+- threshold: number (dB)
+- isCalibrating: boolean
+- isReady: boolean
+- calibrate(): Promise<void>
+- startMonitoring(): Promise<boolean>
+- stopMonitoring(): Promise<void>
+
+Behavioral Notes:
+- Calibration collects samples for ~2s and sets threshold = max(-50, peakNoise + sensitivityPadding)
+- Uses AudioModule.requestRecordingPermissionsAsync() for microphone permission
+- Uses recorder.prepareToRecordAsync() and recorder.record(), followed by recorder.stop()
+- Polls recorder.getStatus().metering every 100ms while monitoring
+- Must be resilient when recorder is released/unmounted (safeGetStatus wrapper)
+
+Performance & Battery
+- Polling frequency: 100ms (balance accuracy vs CPU)
+- Avoid long-running background recording; stop monitoring on unmount
+
+## Recording Lifecycle (SessionScreen)
+1. On mount: calibrate() → small delay → startMonitoring()
+2. When isSpeaking transitions to true and per-step flag not set: start child recorder (prepareToRecordAsync, record)
+3. On user confirming "Child Responded": stop child recorder, save file via recordingService, mark step correct
+4. On "No Response" or timeout: stop/cleanup child recorder without saving
+5. After final step: compile session summary and POST to backend
+
+## Local Persistence & Sync
+- sessionStorage.ts: manages AsyncStorage persistence of session history and pending uploads
+- Pending sessions: queue POST requests when offline, attempt retry on network restored
+- Device ID: generated once on first launch and persisted (AsyncStorage → consider SecureStore for Phase 2)
+
+## Accessibility
+- All actionable elements must have accessible labels (accessibilityLabel)
+- Buttons use minimum 44x44pt touch targets
+- Color contrast must meet WCAG AA for text
+- Support TalkBack/VoiceOver: important text reads (prompt, mic state, timer)
+- Respect reduced motion: disable pulsing animations when user prefers reduced motion
+
+## UX & Error States
+- Permission denied: show clear screen explaining why microphone required and link to settings
+- Calibration failure: retry option
+- No steps loaded: show a friendly error with action to return home and re-initialize
+- Network failure during upload: mark session as pending; show toast & retry logic
+
+## Testing Guidance
+Unit tests
+- Recommendation engine logic
+- useSessionStore actions and reducers
+- Audio threshold calculations (pure functions)
+
+Integration tests
+- Session flow: calibration → monitoring → detection → save → upload (mock recorder & API)
+- Permissions: simulate allow/deny flows
+
+E2E tests (on device/emulator)
+- Full happy path: start session, child response, session complete
+- Offline mode: start session without network and upload afterward
+
+## Instrumentation & Logging
+- Use logger.ts for structured logging; only log sensitive items in dev
+- Track analytics events: session_started, session_completed, calibration_failed
+
+## Performance Budget
+- App launch: <3s cold start on mid-range device
+- SessionScreen: UI must remain responsive during audio polling (avoid heavy synchronous work on JS thread)
+- Keep per-frame work minimal; use native animations when possible
+
+## Developer Experience
+- Strict TypeScript settings; run tsc in CI
+- ESLint + Prettier enforced in CI
+- Fast reloading via Expo in development
+
+## Future Frontend Enhancements
+- Persist calibration threshold between sessions for faster startup
+- Optionally export recordings for research or therapist review (user opt-in)
+- Cloud backup of recordings (opt-in, encrypted)
+- Theming and localization (i18n)
+
+---
+Contact: frontend@talktally.dev
