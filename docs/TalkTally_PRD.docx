@@ -1,0 +1,45 @@
+# TalkTally — Product Requirements Document (PRD)
+
+## Executive Summary
+
+TalkTally is a React Native mobile application to help caregivers track and develop early communication skills in toddlers through guided speech detection, automatic recording, and progress tracking. It uses on-device audio metering to detect when a child speaks, records their responses locally, and syncs session summaries to a backend for historical tracking and adaptive recommendations.
+
+## Target Users
+- Caregivers (parents, early educators, speech therapists)
+
+## Platforms & Tech Stack
+- Mobile: React Native (Expo SDK 54), TypeScript
+- Backend: Node.js + Express, PostgreSQL
+- State: Zustand
+- Audio: Expo Audio
+
+## Core Features
+1. Onboarding & Permissions
+2. Home with recommended session
+3. Calibration & Voice Detection
+4. Session flow with prompts, recording, and timeout
+5. History & progress tracking
+6. Backend session sync
+
+## Session Flow
+- Calibration (2s) → Monitoring → Detect speech → Record child audio → Save local file → Log response → Advance step
+
+## Recommendation Engine
+- Uses last sessions and accuracy thresholds to suggest next session
+
+## Data Model (summary)
+- users: id, device_id, created_at
+- sessions: id, device_id, accuracy, total_steps, completed_at
+
+## Privacy & Security (high-level)
+- No PII collected or stored on server
+- Audio files remain on device
+- Device ID used for anonymous tracking
+
+## Acceptance Criteria (MVP)
+- Voice detection works on-device
+- Sessions recorded and saved locally
+- Session summary uploads to backend
+- No PII stored or transmitted
+
+(Full PRD content available in repository)
