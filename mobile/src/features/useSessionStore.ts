@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SessionStep } from './sessionData';
-import { getHistory, markSessionSynced } from './sessionStorage';
+import { getHistory, markSessionSynced, StepResult } from './sessionStorage';
 import { syncSession } from '../services/apiService';
 import { getDeviceId } from '../services/deviceService';
 import { logger } from '../services/logger';
@@ -12,18 +12,33 @@ interface ResponseRecord {
   stepId: number;
   didSpeak: boolean;
   timestamp: number;
+  recordingPath?: string; // saved after child responds
+}
+
+interface SessionMeta {
+  sessionNumber: number;
+  sessionTitle: string;
+  level: string;
 }
 
 interface SessionState {
   steps: SessionStep[];
   currentStepIndex: number;
   sessionResults: ResponseRecord[];
+  sessionMeta: SessionMeta;
   setSteps: (steps: SessionStep[]) => void;
-  logResponse: (stepId: number, didSpeak: boolean) => void;
+  setSessionMeta: (meta: SessionMeta) => void;
+  logResponse: (stepId: number, didSpeak: boolean, recordingPath?: string) => void;
   nextStep: () => boolean;
   resetSession: () => void;
   completeSession: () => Promise<void>;
 }
+
+const DEFAULT_META: SessionMeta = {
+  sessionNumber: 1,
+  sessionTitle: '',
+  level: 'Beginner',
+};
 
 export const useSessionStore = create<SessionState>()(
   persist(
@@ -31,10 +46,12 @@ export const useSessionStore = create<SessionState>()(
       steps: [],
       currentStepIndex: 0,
       sessionResults: [],
+      sessionMeta: DEFAULT_META,
 
       setSteps: (steps: SessionStep[]) => set({ steps }),
+      setSessionMeta: (meta: SessionMeta) => set({ sessionMeta: meta }),
 
-      logResponse: (stepId, didSpeak) => {
+      logResponse: (stepId, didSpeak, recordingPath) => {
         analytics.track(
           didSpeak ? 'session_step_responded' : 'session_step_skipped',
           { stepId }
@@ -42,7 +59,7 @@ export const useSessionStore = create<SessionState>()(
         set((state) => ({
           sessionResults: [
             ...state.sessionResults,
-            { stepId, didSpeak, timestamp: Date.now() },
+            { stepId, didSpeak, timestamp: Date.now(), recordingPath },
           ],
         }));
       },
@@ -57,7 +74,7 @@ export const useSessionStore = create<SessionState>()(
       },
 
       completeSession: async () => {
-        const { sessionResults, steps, resetSession } = get();
+        const { sessionResults, steps, sessionMeta, resetSession } = get();
 
         if (sessionResults.length === 0) {
           resetSession();
@@ -68,15 +85,32 @@ export const useSessionStore = create<SessionState>()(
         const accuracy = Math.round((positiveResponses / steps.length) * 100);
         const localId = Date.now().toString();
 
+        // Build per-step breakdown including recording paths
+        const stepResults: StepResult[] = steps.map((step) => {
+          const result = sessionResults.find(r => r.stepId === step.id);
+          return {
+            stepId:        step.id,
+            instruction:   step.instruction,
+            tip:           step.tip,
+            didSpeak:      result?.didSpeak ?? false,
+            timestamp:     result?.timestamp ?? Date.now(),
+            recordingPath: result?.recordingPath,
+          };
+        });
+
         const newRecord = {
-          id: localId,
-          date: new Date().toLocaleDateString(),
+          id:            localId,
+          date:          new Date().toLocaleDateString(),
           accuracy,
-          totalSteps: steps.length,
-          synced: false,
+          totalSteps:    steps.length,
+          synced:        false,
+          sessionNumber: sessionMeta.sessionNumber,
+          sessionTitle:  sessionMeta.sessionTitle,
+          level:         sessionMeta.level,
+          stepResults,
         };
 
-        // 1. Save locally first — user always has their data even if offline
+        // Save locally first
         const history = await getHistory();
         await AsyncStorage.setItem(
           'talk-tally-history',
@@ -86,21 +120,17 @@ export const useSessionStore = create<SessionState>()(
         analytics.track('session_completed', { accuracy, totalSteps: steps.length });
         logger.info('Session', `Completed. Accuracy: ${accuracy}%`);
 
-        // 2. Attempt backend sync
+        // Sync to backend
         try {
           const deviceId = await getDeviceId();
           const result = await syncSession({ deviceId, accuracy, totalSteps: steps.length });
-
           if (result.success) {
             await markSessionSynced(localId);
-            analytics.track('session_synced');
             logger.info('Session', 'Synced to backend');
           } else {
-            analytics.track('session_sync_failed', { reason: result.error });
-            logger.warn('Session', 'Sync failed — will retry later', result.error);
+            logger.warn('Session', 'Sync failed', result.error);
           }
         } catch (e) {
-          analytics.track('session_sync_failed', { reason: 'exception' });
           logger.warn('Session', 'Sync error', e);
         }
 
@@ -112,6 +142,7 @@ export const useSessionStore = create<SessionState>()(
           currentStepIndex: 0,
           sessionResults: [],
           steps: [],
+          sessionMeta: DEFAULT_META,
         }),
     }),
     {
