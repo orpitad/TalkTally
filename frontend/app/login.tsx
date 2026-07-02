@@ -163,7 +163,7 @@ export default function Login() {
                       if (e.nativeEvent.key === "Backspace") onBackspace(i);
                     }}
                     keyboardType="number-pad"
-                    maxLength={i === 0 ? 6 : 1}
+                    maxLength={1}
                     style={styles.otpBox}
                     selectionColor={colors.brand}
                     autoComplete={Platform.OS === "ios" ? "one-time-code" : "sms-otp"}
@@ -287,6 +287,7 @@ const styles = StyleSheet.create({
   otpRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
   otpBox: {
     flex: 1,
+    minWidth: 0,
     height: 60,
     borderRadius: radius.md,
     borderWidth: 2,
