@@ -1,8 +1,8 @@
 # TalkTally — Pediatric Speech Companion (Expo Mobile App)
 
-> A warm, tactile mobile companion for parents of toddlers **12–36 months**. TalkTally guides caregivers through developmental speech milestones with flashcards, mic-based room calibration, on-device recording, and **AI-scored pronunciation** — then keeps a session history with playback of the child's raw vocal attempts.
+> A warm, tactile mobile companion for parents of toddlers **12–36 months**. TalkTally guides caregivers through developmental speech milestones with flashcards, mic-based room calibration, on-device recording, and **AI-scored pronunciation** using **Groq's free-tier Whisper-large-v3-turbo** — then keeps a session history with playback of the child's raw vocal attempts.
 
-Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB** backend, wrapped by the Emergent preview / deployment platform.
+Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB** backend. **Fully open-source and self-hostable** — runs on your laptop with Expo Go on your phone.
 
 ---
 
@@ -12,14 +12,14 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 2. [Tech Stack](#tech-stack)
 3. [Project Structure](#project-structure)
 4. [File-by-File Guide](#file-by-file-guide)
-5. [Environment Variables](#environment-variables)
-6. [Running Locally (inside the Emergent container)](#running-locally-inside-the-emergent-container)
-7. [Auth Flow (Email + 6-digit OTP)](#auth-flow-email--6-digit-otp)
-8. [Full User Journey](#full-user-journey)
-9. [Backend API Reference](#backend-api-reference)
-10. [Where Emergent APIs / Keys / Icons Are Used](#where-emergent-apis--keys--icons-are-used)
-11. [Testing](#testing)
-12. [Deployment](#deployment)
+5. [Prerequisites](#prerequisites)
+6. [Local Setup (Laptop + Expo Go)](#local-setup-laptop--expo-go)
+7. [Environment Variables](#environment-variables)
+8. [Auth Flow (Email + 6-digit OTP)](#auth-flow-email--6-digit-otp)
+9. [Full User Journey](#full-user-journey)
+10. [Backend API Reference](#backend-api-reference)
+11. [Where External APIs / Keys / Icons Live](#where-external-apis--keys--icons-live)
+12. [Testing](#testing)
 13. [Design System](#design-system)
 14. [Roadmap / Next Enhancements](#roadmap--next-enhancements)
 
@@ -34,7 +34,7 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 | **Home dashboard** | Avatar with initials, cohort chip, personalised **Smart Tip** card, and a **Syllabus / History** segmented control. |
 | **Syllabus** | **15 developmental phonetics milestones** filtered by cohort (Bilabials → Blends → Short phrases). Each card leads into a calibration + practice session. |
 | **Room calibration** | 2-second mic sweep with live LED-bar dB meter; establishes a noise floor before practice. |
-| **Flashcard practice** | Word + emoji + phoneme + parent coaching tip. **Tap-to-record → live sound-bubble → Whisper transcription → AI match score → Correct / Skip / Retry**. |
+| **Flashcard practice** | Word + emoji + phoneme + parent coaching tip. **Tap-to-record → live sound-bubble → Groq Whisper transcription → AI match score → Correct / Skip / Retry**. |
 | **Scoreboard** | Accuracy ring, correct / total / XP, per-word transcript, one-tap "Complete Lesson" that commits the session. |
 | **History** | Reverse-chronological session cards with accuracy ring; drilling in reveals **per-word audio playback** (▶ PLAY BALL, ▶ PLAY BABY). |
 | **Sign-out** | Home settings icon clears the JWT + local state and returns to /login. |
@@ -47,22 +47,18 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 - Expo SDK **54**, React Native **0.81**, TypeScript
 - **expo-router v6** file-based routing
 - **expo-audio 1.1** for recording + playback + dB metering
-- **expo-file-system** (legacy) for base64 audio encoding
+- **expo-file-system** for base64 audio encoding
 - **expo-linear-gradient**, **@expo/vector-icons** (Ionicons)
 - **react-native-safe-area-context** for insets
-- `@react-native-async-storage/async-storage` (via `@/src/utils/storage`) — token & profile cache
+- `@react-native-async-storage/async-storage` — token & profile cache
 
 **Backend** (`/app/backend`)
 - FastAPI + Uvicorn
 - **Motor** async MongoDB driver
 - **PyJWT** for JWT sessions (HS256, 90-day)
-- **passlib[bcrypt]** for OTP + password hashing
-- **emergentintegrations** — Whisper STT via the Emergent Universal LLM Key
+- **passlib[bcrypt]** for OTP hashing
+- **groq** — official async Groq SDK (Whisper transcription)
 - **pydantic + EmailStr** for validation
-
-**Platform**
-- Emergent Kubernetes preview container (ingress routes `/api/*` → backend :8001, everything else → Expo :3000)
-- Supervisor process manager (`backend`, `expo`, `mongodb`, `code-server`)
 
 ---
 
@@ -72,26 +68,27 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 /app
 ├── README.md                          ← you are here
 ├── design_guidelines.json             ← generated design tokens (Tactile Playful Light)
-├── config.json                        ← Emergent platform metadata
-├── entrypoint.sh
+├── config.json                        ← app metadata (kept as-is)
 ├── memory/
 │   ├── PRD.md                         ← product requirements document
-│   └── test_credentials.md            ← how to sign in during testing (no fixed creds — email OTP)
+│   └── test_credentials.md            ← how to sign in during testing (email OTP)
 ├── backend/
-│   ├── .env                           ← MONGO_URL, DB_NAME, EMERGENT_LLM_KEY, JWT_SECRET_KEY
-│   ├── requirements.txt               ← Python deps (fastapi, motor, pyjwt, passlib, emergentintegrations …)
+│   ├── .env                           ← MONGO_URL, DB_NAME, GROQ_API_KEY, JWT_SECRET_KEY
+│   ├── .env.example                   ← template (safe to commit)
+│   ├── requirements.txt               ← Python deps (fastapi, motor, pyjwt, passlib, groq …)
 │   ├── server.py                      ← ALL FastAPI routes (auth, profiles, sessions, transcribe)
 │   └── tests/
+│       ├── conftest.py
 │       ├── test_talktally_api.py      ← profiles/sessions/transcribe regression
 │       └── test_auth_talktally.py     ← email OTP + JWT auth tests
 ├── frontend/
-│   ├── .env                           ← EXPO_PUBLIC_BACKEND_URL, EXPO_PACKAGER_* (protected)
+│   ├── .env                           ← EXPO_PUBLIC_BACKEND_URL
 │   ├── app.json                       ← Expo manifest (permissions, plugins, icons)
 │   ├── package.json                   ← JS deps + expo scripts
-│   ├── metro.config.js                ← PROTECTED — do not edit
+│   ├── metro.config.js                ← bundler config (leave alone)
 │   ├── eslint.config.js
 │   ├── tsconfig.json                  ← `@/*` path alias → project root
-│   ├── assets/                        ← icon.png, adaptive-icon.png, splash-image.png, favicon.png
+│   ├── assets/images/                 ← icon.png, adaptive-icon.png, splash-image.png, favicon.png
 │   ├── app/                           ← expo-router file-based routes
 │   │   ├── _layout.tsx                ← root layout (SafeAreaProvider, Stack, font prewarm)
 │   │   ├── +html.tsx                  ← HTML shell for web build
@@ -107,11 +104,9 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 │       ├── api.ts                     ← typed fetch client (Bearer token attached)
 │       ├── theme.ts                   ← colors, spacing, radius, shadows
 │       ├── state.ts                   ← in-memory active-session store
-│       ├── data/
-│       │   └── phonemes.ts            ← 15-milestone curriculum
-│       ├── hooks/
-│       │   └── use-icon-fonts.ts      ← platform-provided icon prewarm hook
-│       └── utils/storage/             ← platform-provided secure/plain KV wrapper
+│       ├── data/phonemes.ts           ← 15-milestone curriculum
+│       ├── hooks/use-icon-fonts.ts    ← Ionicons prewarm hook
+│       └── utils/storage/             ← cross-platform secure/plain KV wrapper
 └── tests/                             ← reserved for future integration tests
 ```
 
@@ -124,8 +119,9 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 | File | Purpose |
 |---|---|
 | `backend/.env` | Runtime secrets (see [Environment Variables](#environment-variables)). |
-| `backend/requirements.txt` | Pinned Python deps. Update **only** via `pip install ... && pip freeze > requirements.txt`. |
-| `backend/server.py` | Monolithic FastAPI app. Sections: **models** (`Profile`, `SessionCreate`, `SessionTarget`, `AuthResponse` …), **auth** (`request-code`, `verify-code`, `me`, `get_current_user` dependency), **profiles** CRUD, **sessions** CRUD (`.limit(100)` on list), **Whisper transcribe** (uses `emergentintegrations.llm.openai.speech_to_text.OpenAISpeechToText`). All routes prefixed `/api`. |
+| `backend/.env.example` | Committable template — copy to `.env` and fill in your keys. |
+| `backend/requirements.txt` | Pinned Python deps. |
+| `backend/server.py` | Monolithic FastAPI app. Sections: **models** (`Profile`, `SessionCreate`, `SessionTarget`, `AuthResponse` …), **auth** (`request-code`, `verify-code`, `me`, `get_current_user` dependency), **profiles** CRUD, **sessions** CRUD (`.limit(100)` on list), **Whisper transcribe** (uses the official `groq.AsyncGroq` SDK with model `whisper-large-v3-turbo`). All routes prefixed `/api`. |
 | `backend/tests/test_talktally_api.py` | Pytest suite for profiles / sessions / transcribe. |
 | `backend/tests/test_auth_talktally.py` | Pytest suite for request-code / verify-code / JWT / attempts / expiry. |
 
@@ -133,14 +129,14 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 
 | Route | Purpose |
 |---|---|
-| `_layout.tsx` | Root Stack + SafeAreaProvider. Prewarms Ionicons font (do NOT remove the prewarm — required for Expo Go Android). |
+| `_layout.tsx` | Root Stack + SafeAreaProvider. Prewarms Ionicons font (required for Expo Go Android). |
 | `+html.tsx` | HTML shell for the Expo web preview. |
 | `index.tsx` | **Boot gate.** Reads JWT from secure storage → `/login` if absent; else calls `/api/auth/me` → `/home` (profile exists) or `/onboarding`. |
 | `login.tsx` | Two-step **email → 6-digit OTP** screen. Handles paste, auto-advance, backspace, 30-second resend cooldown, `login-error` messaging. Stores JWT via `storage.secureSet("talktally.jwt", …)` and routes to `/onboarding`. |
 | `onboarding.tsx` | Name input + age-cohort picker. Creates profile via `POST /api/profiles` and caches `profileId / profileName / profileCohort` in AsyncStorage. |
-| `home.tsx` | Avatar, cohort, personalised recommendation card (worst-scoring category if history exists, else age-appropriate default), **Syllabus** grid + **History** list, pull-to-refresh, sign-out button (`edit-profile-button`). |
+| `home.tsx` | Avatar, cohort, personalised recommendation card, Syllabus grid + History list, pull-to-refresh, sign-out button (`edit-profile-button`). |
 | `calibrate.tsx` | Uses `expo-audio.useAudioRecorder({ isMeteringEnabled: true })` to sample `metering` dB values for 2 s and compute a room noise floor. |
-| `practice.tsx` | Full flashcard session. Records audio → reads to base64 (`expo-file-system` legacy on native, `FileReader` on web) → posts to `/api/transcribe` → shows AI match score + Correct/Skip/Retry. On completion posts full session to `/api/sessions`. |
+| `practice.tsx` | Full flashcard session. Records audio → reads to base64 (`expo-file-system` on native, `FileReader` on web) → posts to `/api/transcribe` → shows AI match score + Correct/Skip/Retry. On completion posts full session to `/api/sessions`. |
 | `scoreboard.tsx` | Success screen: accuracy ring, XP, per-word transcript summary. |
 | `session/[id].tsx` | History detail. Rebuilds base64 → file (`expo-file-system.writeAsStringAsync`) then plays via `Audio.createAudioPlayer`. |
 
@@ -148,24 +144,139 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 
 | File | Purpose |
 |---|---|
-| `api.ts` | Typed `fetch` wrapper (`req<T>()`). Bearer token attached automatically for protected routes. Exports the `api` singleton (`api.requestCode`, `api.verifyCode`, `api.me`, `api.createProfile`, `api.createSession`, `api.listSessions`, `api.getSession`, `api.transcribe` …). |
-| `theme.ts` | Design tokens: `colors` (cream + coral palette), `spacing` (8pt grid), `radius`, `shadow`. Consumed by every screen. |
-| `state.ts` | Module-level in-memory store for the *active* session. Session audio blobs are too big to pass through router params — the store keeps them until `finishSession()` posts and clears. |
-| `data/phonemes.ts` | **The curriculum.** 15 `PhonemeCategory` objects with `id`, `label`, `phoneme_group`, `age_min_months`, `color`, `emoji`, `description`, and `targets[]` (each: `word`, `target_phoneme`, `emoji`, `coaching`). Exposes `ageCohortMinMonths()` helper. |
-| `hooks/use-icon-fonts.ts` | **Platform-provided** — prewarms `@expo/vector-icons` for Expo Go Android. Do not modify. |
-| `utils/storage/` | **Platform-provided** cross-platform key-value + secure storage abstraction (`storage.setItem`, `storage.secureSet`, `storage.secureGet`, `storage.secureRemove`, …). Always use this instead of importing `AsyncStorage` / `expo-secure-store` directly. |
+| `api.ts` | Typed `fetch` wrapper (`req<T>()`). Bearer token attached automatically. Exports the `api` singleton. |
+| `theme.ts` | Design tokens: `colors`, `spacing`, `radius`, `shadow`. |
+| `state.ts` | Module-level in-memory store for the active session (audio blobs are too big for router params). |
+| `data/phonemes.ts` | The 15-milestone curriculum. |
+| `hooks/use-icon-fonts.ts` | Ionicons font prewarm — do not modify. |
+| `utils/storage/` | Cross-platform secure key-value store. Always use this instead of `AsyncStorage` / `expo-secure-store` directly. |
 
-### Platform / Config
+### Config
 
 | File | Purpose |
 |---|---|
 | `frontend/app.json` | Expo manifest. Declares `NSMicrophoneUsageDescription` (iOS) and `RECORD_AUDIO` (Android). Plugins: `expo-router`, `expo-splash-screen`, `expo-audio`. Icons point at `assets/images/*`. |
-| `frontend/.env` | `EXPO_PUBLIC_BACKEND_URL` (used by `src/api.ts`), plus **protected** `EXPO_PACKAGER_PROXY_URL` / `EXPO_PACKAGER_HOSTNAME` (never edit — set by the Emergent preview). |
-| `frontend/metro.config.js` | Bundler config — **protected**. |
-| `design_guidelines.json` | Generated by the Emergent design agent; source of truth for palette, typography, component sizing. |
-| `config.json` | Emergent platform metadata. |
-| `memory/PRD.md` | Product requirements doc — user flows, non-goals, next enhancements. |
+| `frontend/.env` | `EXPO_PUBLIC_BACKEND_URL` — the URL of your local backend (e.g. `http://192.168.1.42:8001` — see [Local Setup](#local-setup-laptop--expo-go)). |
+| `frontend/metro.config.js` | Bundler config. |
+| `design_guidelines.json` | Design tokens (palette, typography, component sizing). |
+| `config.json` | App metadata (kept). |
+| `memory/PRD.md` | Product requirements doc. |
 | `memory/test_credentials.md` | How to sign in during automated testing (email OTP retrieval). |
+
+---
+
+## Prerequisites
+
+- **Node.js ≥ 20** with **Yarn** (`corepack enable` or `npm i -g yarn`)
+- **Python ≥ 3.11**
+- **MongoDB** — either local (`brew install mongodb-community` / apt) or a free **MongoDB Atlas** cluster
+- **Expo Go** app installed on your iPhone / Android (search "Expo Go" in the App/Play Store)
+- Your laptop and your phone on the **same Wi-Fi network**
+- A free **Groq API key** — sign up at <https://console.groq.com/keys> (Whisper transcription is on their free tier)
+
+---
+
+## Local Setup (Laptop + Expo Go)
+
+### 1. Clone & install
+
+```bash
+git clone <this-repo>
+cd talktally
+
+# Backend
+cd backend
+python -m venv .venv
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Frontend
+cd ../frontend
+yarn install
+```
+
+### 2. Configure environment
+
+```bash
+# Backend
+cd backend
+cp .env.example .env
+# Then open .env and:
+#   - set GROQ_API_KEY to your Groq key
+#   - (optional) point MONGO_URL to your Atlas URI
+#   - generate a fresh JWT_SECRET_KEY:
+#       python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Find your laptop's **LAN IP** (so your phone can reach the backend):
+
+```bash
+# macOS / Linux
+ifconfig | grep -E "inet (192|10)"
+# Windows
+ipconfig | findstr IPv4
+```
+
+Then create `frontend/.env`:
+
+```env
+EXPO_PUBLIC_BACKEND_URL=http://192.168.1.42:8001    # ← replace with YOUR laptop IP
+```
+
+> ⚠️ Do **not** use `http://localhost:8001` — Expo Go runs on your phone, which cannot see your laptop's `localhost`.
+
+### 3. Start MongoDB
+
+```bash
+# Local install
+mongod --dbpath ~/data/db
+
+# Or use Docker
+docker run -d -p 27017:27017 --name mongo mongo:7
+```
+
+### 4. Start the backend
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+```
+
+You should see `INFO:     Uvicorn running on http://0.0.0.0:8001`.
+
+Smoke test in a new terminal:
+
+```bash
+curl http://localhost:8001/api/
+# {"message":"TalkTally API","status":"ok"}
+```
+
+### 5. Start Expo
+
+```bash
+cd frontend
+yarn start
+```
+
+Metro prints a **QR code** and a URL like `exp://192.168.1.42:8081`.
+
+### 6. Open in Expo Go
+
+1. Open **Expo Go** on your phone.
+2. Scan the QR code (iOS: use the camera app; Android: tap "Scan QR Code" inside Expo Go).
+3. TalkTally boots on your phone.
+
+### 7. Sign in
+
+1. Enter any email on the Login screen and tap **Send Code**.
+2. Back in your **backend terminal** you'll see:
+   ```
+   WARNING [TalkTally OTP] you@example.com -> 482119
+   ```
+3. Type those 6 digits on your phone → you're in.
+
+> **Note:** OTP emails are **not actually sent** in this build — codes only appear in the backend console. Swap in Resend/SendGrid for production.
 
 ---
 
@@ -175,40 +286,17 @@ Built on **Expo SDK 54** (React Native + expo-router) with a **FastAPI + MongoDB
 
 | Key | Purpose | Notes |
 |---|---|---|
-| `MONGO_URL` | Local Mongo connection string. | **Protected** — set by the platform. |
-| `DB_NAME` | Mongo database name. | Kept as `test_database` in preview. |
-| `EMERGENT_LLM_KEY` | Emergent Universal LLM key. | Used by `emergentintegrations` to call **OpenAI Whisper-1** for pronunciation transcription. Also works for GPT / Gemini / Claude text if you extend the app. |
-| `JWT_SECRET_KEY` | Random 64-byte hex secret. | Signs 90-day auth JWTs. Regenerate = invalidate all existing tokens. |
+| `MONGO_URL` | Mongo connection string. | `mongodb://localhost:27017` for local, or your Atlas URI. |
+| `DB_NAME` | Mongo database name. | Any name — e.g. `talktally`. |
+| `GROQ_API_KEY` | Groq Whisper API key. | **Free** — grab from <https://console.groq.com/keys>. Required for `/api/transcribe`. |
+| `JWT_SECRET_KEY` | 64-byte hex secret for signing session tokens. | Regenerate = invalidates all existing tokens. |
 | `JWT_ALGORITHM` | Defaults to `HS256`. | |
 
 ### `frontend/.env`
 
 | Key | Purpose |
 |---|---|
-| `EXPO_PUBLIC_BACKEND_URL` | Base URL for backend calls; used by `src/api.ts`. |
-| `EXPO_PACKAGER_PROXY_URL` | **PROTECTED** — do not modify. Powers the preview URL & Expo Go QR. |
-| `EXPO_PACKAGER_HOSTNAME` | **PROTECTED** — do not modify. |
-
----
-
-## Running Locally (inside the Emergent container)
-
-Everything is already wired to Supervisor. You should never need `expo start` / `uvicorn` by hand.
-
-```bash
-# Restart services after edits
-sudo supervisorctl restart backend
-sudo supervisorctl restart expo
-
-# Tail logs
-tail -f /var/log/supervisor/backend.err.log      # includes dev-mode OTP codes
-tail -f /var/log/supervisor/expo.out.log
-
-# Quick backend smoke test
-curl -s http://localhost:8001/api/                # {"message":"TalkTally API","status":"ok"}
-```
-
-Frontend preview URL is exposed by the platform — grab it from the Emergent UI or from `EXPO_PUBLIC_BACKEND_URL` in `frontend/.env` (drop `/api`).
+| `EXPO_PUBLIC_BACKEND_URL` | Base URL for backend calls, used by `src/api.ts`. Must be reachable from the phone (use your laptop LAN IP, not `localhost`). |
 
 ---
 
@@ -219,11 +307,11 @@ Frontend preview URL is exposed by the platform — grab it from the Emergent UI
    ```
    [TalkTally OTP] parent@example.com -> 482119
    ```
-   > **`MOCKED`**: no email is actually sent. Retrieve the code with `grep "TalkTally OTP" /var/log/supervisor/backend.err.log`. Wire up Resend / SendGrid before shipping to production.
+   > **MOCKED:** no email is actually sent. Retrieve the code from the backend console.
 3. UI advances to the OTP step; user types 6 digits. Client calls `POST /api/auth/verify-code`.
 4. Backend verifies the hash, enforces 5-attempt / 10-minute limits, upserts a `users` doc, and returns `{ token, user }`.
 5. Token is stored via `storage.secureSet("talktally.jwt", token)` and attached to every subsequent request in `src/api.ts` as `Authorization: Bearer …`.
-6. Sign-out (home `edit-profile-button`) calls `storage.secureRemove("talktally.jwt")` and returns to `/login`.
+6. Sign-out clears the token and returns to `/login`.
 
 ---
 
@@ -266,31 +354,24 @@ All routes are prefixed with `/api`. Routes marked 🔒 require `Authorization: 
 |---|---|---|---|
 | POST | 🔒 `/transcribe` | `{ audio_base64, ext, target_word }` | `{ transcript, match_score, correct }` |
 
-`match_score` is `SequenceMatcher` ratio × 100 (exact match = 100). `correct = match_score ≥ 65`.
+`match_score` = `SequenceMatcher` ratio × 100 (exact match = 100). `correct = match_score ≥ 65`.
 
 ---
 
-## Where Emergent APIs / Keys / Icons Are Used
+## Where External APIs / Keys / Icons Live
 
-This section maps every touchpoint to Emergent-provided assets.
+### 🔑 `GROQ_API_KEY` (free Whisper transcription)
+- **Location**: `backend/.env` → `GROQ_API_KEY=gsk_…`
+- **Loaded in**: `backend/server.py` (top of file, via `os.environ.get("GROQ_API_KEY")`).
+- **Used in**: `POST /api/transcribe` — passed into `AsyncGroq(api_key=GROQ_API_KEY)` from the official `groq` Python SDK. Model: `whisper-large-v3-turbo`.
+- **Cost**: **free** on Groq's generous free tier at the time of writing (see <https://groq.com/pricing>). Sign-up at <https://console.groq.com/keys>.
 
-### 🔑 `EMERGENT_LLM_KEY` (Universal LLM key)
-- **Location**: `backend/.env` → `EMERGENT_LLM_KEY=sk-emergent-…`
-- **Loaded in**: `backend/server.py` (top of file, via `os.environ.get("EMERGENT_LLM_KEY")`).
-- **Used in**: `POST /api/transcribe` — passed into `OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)` from `emergentintegrations.llm.openai.speech_to_text`. This is the **only** API call to an Emergent-brokered LLM in the app today. Model: `whisper-1`.
-- **What it costs**: consumes credits from your Emergent Universal LLM balance. Top up via **Emergent → Profile → Universal Key → Add Balance** (auto-top-up recommended).
-
-### 📦 `emergentintegrations` Python library
-- **Location**: pre-installed in the container, imported at the top of `backend/server.py`:
+### 📦 `groq` Python library
+- Official Groq SDK, imported in `backend/server.py`:
   ```python
-  from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
+  from groq import AsyncGroq
   ```
-- **Purpose**: proxies OpenAI / Gemini / Claude / Whisper calls through the Emergent backend using the Universal LLM Key. No direct OpenAI / Anthropic keys are stored in this repo.
-
-### 🌐 Emergent Platform env vars (**do not modify**)
-- `frontend/.env` → `EXPO_PACKAGER_PROXY_URL`, `EXPO_PACKAGER_HOSTNAME` — power the preview URL + Expo Go QR code.
-- `EXPO_PUBLIC_BACKEND_URL` — auto-populated by Emergent so the mobile client can reach the backend without hardcoding IPs.
-- `/etc/supervisor/conf.d/supervisord.conf` — READONLY, managed by the platform.
+- Used only for the async Whisper transcription call. No other AI providers are wired in.
 
 ### 🖼️ Icons
 - **`@expo/vector-icons` (Ionicons set)** — the sole icon library used app-wide. Every `<Ionicons name="…" />` reference lives in:
@@ -301,52 +382,35 @@ This section maps every touchpoint to Emergent-provided assets.
   - `app/practice.tsx` — `close`, `bulb`, `stop`, `checkmark-circle`, `close-circle`, `refresh`
   - `app/scoreboard.tsx` — `checkmark`
   - `app/session/[id].tsx` — `chevron-back`, `play`, `pause`
-- **Prewarming**: `src/hooks/use-icon-fonts.ts` (platform-provided) is invoked from `app/_layout.tsx` so Ionicons render immediately in **Expo Go Android** (which is otherwise slow to load the font). **Do not remove this hook**.
-- **App icons** (splash / adaptive / favicon): `frontend/assets/images/icon.png`, `adaptive-icon.png`, `splash-image.png`, `favicon.png` — declared in `app.json`. Replace these to rebrand.
+- **Prewarming**: `src/hooks/use-icon-fonts.ts` is invoked from `app/_layout.tsx` so Ionicons render immediately in **Expo Go Android**. Do not remove.
+- **App icons & splash**: `frontend/assets/images/icon.png`, `adaptive-icon.png`, `splash-image.png`, `favicon.png`. Ship as a simple "TT" coral logo — replace freely to rebrand.
 
-### 🚀 Emergent deployment / publish
-- **Not called from code.** Publishing to iOS / Android / web is triggered from the **Publish** button in the top-right of the Emergent UI. Do not scaffold EAS / build tools here.
-
-### 🧪 Platform storage abstraction (`@/src/utils/storage`)
-- Emergent-shipped cross-platform KV + secure store wrapper.
+### 🔐 Storage abstraction (`@/src/utils/storage`)
+- Cross-platform key-value + secure store wrapper (uses `AsyncStorage` on native, `localStorage` + secure fallbacks on web).
 - Used in `app/login.tsx` (JWT), `app/index.tsx` (bootstrap read), `app/home.tsx` (sign-out clear), `src/api.ts` (attach Bearer).
-- **Never import** `@react-native-async-storage/async-storage`, `expo-secure-store`, or `react-native-mmkv` directly.
+- **Never import** `@react-native-async-storage/async-storage`, `expo-secure-store`, or `react-native-mmkv` directly — always go through this helper.
 
 ---
 
 ## Testing
 
-### Backend (pytest, 20 cases)
+### Backend (pytest)
+
 ```bash
-pytest /app/backend/tests/ -v
+cd backend
+source .venv/bin/activate
+pytest tests/ -v
 ```
-Covers all profiles / sessions / transcribe / auth routes including expiry, bad codes, attempts limits, and Whisper end-to-end with a synthetic WAV.
 
-### Frontend (Playwright via the platform testing agent)
-The testing agent drives the preview URL end-to-end (login → onboarding → home → calibrate). Reports saved to `/app/test_reports/iteration_<n>.json`.
+Covers all profiles / sessions / transcribe / auth routes including expiry, bad codes, attempts limits, and Whisper end-to-end.
 
-To sign in during a test:
+### Manual sign-in during testing
+
 ```bash
-curl -X POST $EXPO_PUBLIC_BACKEND_URL/api/auth/request-code \
+curl -X POST http://localhost:8001/api/auth/request-code \
      -H "Content-Type: application/json" \
      -d '{"email":"tester@talktally.dev"}'
-grep "TalkTally OTP" /var/log/supervisor/backend.err.log | tail -1
-```
-
----
-
-## Deployment
-
-1. Click **Publish** (top-right, Emergent UI).
-2. Fill iOS / Android build credentials as prompted.
-3. The Emergent build pipeline handles Expo prebuild, native compile, and store artifacts.
-4. Push-notifications & LAN dev tricks are **not** required — everything is served through Emergent's ingress in production.
-
-Deployment health checks:
-```bash
-# From the container
-curl -s http://localhost:8001/api/                     # backend up
-curl -s $EXPO_PUBLIC_BACKEND_URL/api/                  # backend reachable via ingress
+# Then check the uvicorn console for the 6-digit code.
 ```
 
 ---
@@ -376,12 +440,12 @@ Typography: system bold — playful yet clinical.
 
 ## Roadmap / Next Enhancements
 
-- **Real email delivery** — swap the `logger.warning` in `request_code` for **Resend / SendGrid**. Ask any Emergent agent to wire it up.
-- **Viral share-clip card** — export a per-word audio card ("Watch my baby say Ball!") for social sharing; the audio is already stored in `SessionDetail.targets[*].audio_base64`.
+- **Real email delivery** — swap the `logger.warning` in `request_code` for **Resend / SendGrid**.
+- **Viral share-clip card** — export a per-word audio card ("Watch my baby say Ball!") for social sharing; audio is already stored in `SessionDetail.targets[*].audio_base64`.
 - **Mastery heatmap + streaks** for retention.
 - **DEV_MODE flag** to hide OTPs from prod logs.
 - **Multi-child profiles** and clinician export.
 
 ---
 
-_Built with ❤️ using Expo + FastAPI + MongoDB, orchestrated by the Emergent platform._
+_Built with ❤️ using Expo + FastAPI + MongoDB + Groq Whisper._

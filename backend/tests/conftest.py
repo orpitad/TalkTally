@@ -9,7 +9,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 @pytest.fixture(scope="session")
 def base_url():
-    url = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://speech-companion-app.preview.emergentagent.com"
+    url = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "http://localhost:8001"
     return url.rstrip("/")
 
 

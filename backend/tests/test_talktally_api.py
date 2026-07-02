@@ -154,16 +154,46 @@ def _make_wav_bytes(seconds=1.0, freq=440.0, framerate=16000):
 
 
 class TestTranscribe:
+    """
+    /api/transcribe now backed by Groq (whisper-large-v3-turbo).
+    GROQ_API_KEY is intentionally unset in dev; the handler must 500 with
+    'GROQ_API_KEY missing' BEFORE any base64 decoding is attempted.
+    """
+
+    def test_transcribe_missing_key_returns_500(self, base_url, api_client):
+        import os
+        if os.environ.get("GROQ_API_KEY"):
+            pytest.skip("GROQ_API_KEY is set; skipping missing-key assertion")
+        wav_bytes = _make_wav_bytes(seconds=0.2)
+        b64 = base64.b64encode(wav_bytes).decode("ascii")
+        r = api_client.post(
+            f"{base_url}/api/transcribe",
+            json={"audio_base64": b64, "ext": "wav", "target_word": "hello"},
+            timeout=30,
+        )
+        assert r.status_code == 500, r.text
+        assert "GROQ_API_KEY missing" in r.json().get("detail", "")
+
     def test_transcribe_invalid_base64(self, base_url, api_client):
+        """
+        With GROQ_API_KEY unset the handler short-circuits with 500 before
+        it ever reaches base64 decoding. Once a real key is supplied, the
+        same request would surface as 400 'Invalid base64 audio'.
+        """
+        import os
         r = api_client.post(
             f"{base_url}/api/transcribe",
             json={"audio_base64": "not-valid-base64!!!@@@###", "ext": "wav", "target_word": "hello"},
         )
-        # server uses base64.b64decode which is lenient; may pass decode step then fail whisper.
-        # Accept 400 (validation) or 500 (whisper rejected garbage).
-        assert r.status_code in (400, 500), r.text
+        if not os.environ.get("GROQ_API_KEY"):
+            assert r.status_code == 500, r.text
+            assert "GROQ_API_KEY missing" in r.json().get("detail", "")
+        else:
+            assert r.status_code == 400, r.text
+            assert "Invalid base64" in r.json().get("detail", "")
 
     def test_transcribe_synthetic_wav(self, base_url, api_client):
+        import os
         wav_bytes = _make_wav_bytes(seconds=1.0)
         b64 = base64.b64encode(wav_bytes).decode("ascii")
         r = api_client.post(
@@ -171,8 +201,12 @@ class TestTranscribe:
             json={"audio_base64": b64, "ext": "wav", "target_word": "hello"},
             timeout=60,
         )
-        # Whisper on synthetic sine may succeed with empty/garbage transcript, or fail.
-        # We accept either 200 (contract shape) or 500 (whisper error).
+        if not os.environ.get("GROQ_API_KEY"):
+            # Missing key: must return 500 GROQ_API_KEY missing
+            assert r.status_code == 500, r.text
+            assert "GROQ_API_KEY missing" in r.json().get("detail", "")
+            return
+        # With a real key present, Whisper on synthetic sine may 200 or 500.
         assert r.status_code in (200, 500), r.text
         if r.status_code == 200:
             d = r.json()

@@ -5,7 +5,6 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import base64
-import tempfile
 import logging
 import difflib
 import re
@@ -19,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from passlib.context import CryptContext
 
-from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
+from groq import AsyncGroq
 
 
 ROOT_DIR = Path(__file__).parent
@@ -30,7 +29,7 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-me")
 JWT_ALGO = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_TTL_DAYS = 90
@@ -310,44 +309,31 @@ async def get_session(session_id: str):
 
 @api_router.post("/transcribe", response_model=TranscribeResponse)
 async def transcribe(payload: TranscribeRequest):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY missing")
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY missing")
     ext = payload.ext.lower().lstrip(".")
-    if ext not in {"m4a", "mp4", "mp3", "wav", "webm", "mpeg", "mpga"}:
+    if ext not in {"m4a", "mp4", "mp3", "wav", "webm", "mpeg", "mpga", "ogg", "flac"}:
         ext = "m4a"
     try:
         audio_bytes = base64.b64decode(payload.audio_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 audio: {e}")
 
-    tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-        with open(tmp_path, "rb") as audio_file:
-            response = await stt.transcribe(
-                file=audio_file, model="whisper-1", response_format="json", language="en"
-            )
-        # response is a dict-like from litellm
-        transcript_text = ""
-        if isinstance(response, dict):
-            transcript_text = response.get("text", "") or ""
-        else:
-            transcript_text = getattr(response, "text", "") or str(response)
+        groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+        transcription = await groq_client.audio.transcriptions.create(
+            file=(f"audio.{ext}", audio_bytes),
+            model="whisper-large-v3-turbo",
+            response_format="json",
+            language="en",
+        )
+        transcript_text = getattr(transcription, "text", "") or ""
         score = _score_match(transcript_text, payload.target_word or "")
         correct = score >= 65
         return TranscribeResponse(transcript=transcript_text.strip(), match_score=score, correct=correct)
     except Exception as e:
         logger.exception("Transcription failed")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
 
 
 app.include_router(api_router)

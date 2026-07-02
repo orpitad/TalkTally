@@ -1,7 +1,7 @@
 # TalkTally — Product Requirements Document
 
 ## Summary
-**TalkTally** is a warm, tactile Expo mobile companion that helps parents of toddlers (12–36 months) practice developmental speech milestones with their child. It combines guided phonetic flashcards, mic-based room calibration, on-device recording, and AI-scored pronunciation (OpenAI Whisper via Emergent LLM Universal Key), all synced to a MongoDB session history via a FastAPI backend.
+**TalkTally** is a warm, tactile Expo mobile companion that helps parents of toddlers (12–36 months) practice developmental speech milestones with their child. It combines guided phonetic flashcards, mic-based room calibration, on-device recording, and AI-scored pronunciation (**Groq Whisper-large-v3-turbo**, free tier), all synced to a MongoDB session history via a FastAPI backend.
 
 ## Users
 - Parents/caregivers of toddlers doing home speech practice.
@@ -22,9 +22,9 @@
 - **Backend**: FastAPI + Motor (async MongoDB). Routes under `/api`.
   - `POST /api/profiles` · `GET /api/profiles/{id}`
   - `POST /api/sessions` · `GET /api/sessions?profile_id=` · `GET /api/sessions/{id}`
-  - `POST /api/transcribe` — accepts `{audio_base64, ext, target_word}`, calls `OpenAISpeechToText` via `emergentintegrations` with `EMERGENT_LLM_KEY`, returns `{transcript, match_score, correct}`.
+  - `POST /api/transcribe` — accepts `{audio_base64, ext, target_word}`, calls Groq's official `AsyncGroq` client with model `whisper-large-v3-turbo` using `GROQ_API_KEY`, returns `{transcript, match_score, correct}`.
 - **Storage**: MongoDB collections `profiles`, `sessions`. Audio clips stored as base64 inside each session's `targets` array.
-- **AI**: `whisper-1` via Emergent Universal Key. Match scoring = normalized string equality → substring → SequenceMatcher ratio. Threshold correct ≥ 65%.
+- **AI**: `whisper-large-v3-turbo` via Groq (free tier). Match scoring = normalized string equality → substring → SequenceMatcher ratio. Threshold correct ≥ 65%.
 
 ## Design
 - Personality: **Tactile / Playful LIGHT** (see `/app/design_guidelines.json`).
