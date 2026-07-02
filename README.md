@@ -197,6 +197,9 @@ yarn install
 
 ### 2. Configure environment
 
+> ⚠️ **Dotfiles are hidden by default.** `.env` and `.env.example` start with a dot and are hidden in Finder / File Explorer / most editors. Toggle "Show hidden files" (macOS: `Cmd+Shift+.` in Finder; Windows: View → Hidden items; VS Code shows them by default).
+> **Both `backend/.env.example` and `frontend/.env.example` ship with this repo** — if you don't see them, enable hidden files.
+
 ```bash
 # Backend
 cd backend
