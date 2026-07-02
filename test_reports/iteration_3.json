@@ -1,0 +1,73 @@
+{
+  "summary": "Full backend + frontend validation of the new email+OTP auth flow. Added /app/backend/tests/test_auth_talktally.py with 10 new test cases covering request-code, verify-code (wrong/right/attempts>=5/expired/no-request), and /auth/me (missing/invalid/expired/valid). All 20 pytest cases pass (10 new auth + 10 regression) in 7.7s. Direct MongoDB inspection confirms otp_requests doc contains {email, code_hash (bcrypt $2b$), expires_at, attempts=0, created_at}. Frontend E2E completed on public URL: boot->/login, email step -> Send Code -> OTP step with correct subtitle, wrong OTP shows 'Invalid code' error, correct OTP -> /onboarding -> onboarding complete -> /home shows 'Hi, Testy', edit-profile-button clears JWT and routes back to /login. JWT storage/removal via localStorage verified. IMPORTANT SPEC MISMATCH: pydantic EmailStr rejects the '.local' TLD (422), so the review-request test email 'tester+e2e@talktally.local' will not work; tests used '@talktally.dev' instead. UI BUG: On the OTP step the 6 boxes overflow horizontally on 375px width — only ~1 wide box + edge of a second is visible (functional flow still works because testIDs are filled directly).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/auth/request-code",
+        "issue": "pydantic EmailStr rejects reserved TLDs like '.local' with HTTP 422. The review request literally names 'tester+e2e@talktally.local' as the test email — that value fails end-to-end in the actual running backend. Either relax to a plain str+regex validator, pass allow_special_use to email-validator via a custom validator, or change the spec/UX copy to require public TLDs."
+      },
+      {
+        "endpoint": "POST /api/auth/verify-code",
+        "issue": "After attempts>=5 the server deletes the OTP doc and returns 400 'Too many attempts. Please request a new code.', but any subsequent verify call for the same email (before /request-code is re-called) returns 'No code requested for this email' instead. Both are 400, semantics are correct, but the two different strings for effectively the same user state can confuse the UI. Consider a single consistent message."
+      },
+      {
+        "endpoint": "GET /api/auth/me",
+        "issue": "Uses HTTPBearer(auto_error=False) then handles missing/invalid/expired uniformly as 401 — correct. No bug; noting for consistency."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "login.tsx OTP boxes",
+        "issue": "6 OTP input boxes overflow the 375px viewport horizontally — only 1 very wide box (+ edge of a 2nd) is visible on the OTP step. Suspected cause: first TextInput has maxLength={6} for paste support, and the flex-row children lack `minWidth: 0` so flex:1 cannot shrink the first box below its content-derived intrinsic width in React Native Web. Fix options: (a) drop the special-case maxLength — paste is already handled inside onDigit (v.length>1 branch, lines 82–90 of login.tsx), or (b) add `minWidth: 0` to the otpBox StyleSheet. Reference: /app/frontend/app/login.tsx:166 and styles.otpBox at line 288.",
+        "testID": "otp-0..otp-5",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      { "screen": "login (email step)", "issues": ["Layout, contrast, and 60px CTA touch target are fine on 375px."] },
+      { "screen": "login (otp step)", "issues": ["6 OTP inputs overflow horizontally (see ui_bugs). Otherwise labels, resend cooldown, change-email affordance render correctly."] }
+    ],
+    "react_native_issues": [
+      {
+        "component": "shadow* style props",
+        "issue": "Console emits repeated warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Coming from RN Web >=0.75. Reference: /app/frontend/src/theme.ts (shadow.card / shadow.soft). Migrate to boxShadow for web parity."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_talktally.py",
+    "/app/backend/tests/test_talktally_api.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Decide policy on '.local' emails: relax validation (custom Pydantic validator or plain str+regex) or update the review request/UX copy to require public TLDs. Currently .local returns 422 with no user-friendly surface in the login screen.",
+    "Fix OTP box overflow in /app/frontend/app/login.tsx — either drop maxLength={i===0?6:1} (paste is already handled in onDigit) or add `minWidth: 0` to the otpBox StyleSheet.",
+    "Migrate shadow.* theme entries to boxShadow to silence the RN Web deprecation warning.",
+    "(Optional) Add TTL index on otp_requests.expires_at and a unique index on otp_requests.email to auto-clean stale OTPs.",
+    "(Optional) Guard the plaintext 'TalkTally OTP' stderr log with a DEV_MODE env flag before shipping to any non-dev environment."
+  ],
+  "critical_code_review_comments": [
+    "server.py logs the plaintext OTP at WARNING level to stderr. Fine for dev, but any log aggregator would capture codes in a shared env. Guard with an env flag.",
+    "JWT_SECRET falls back to 'dev-secret-change-me' when env is missing. Prefer failing fast (raise) on missing secret to avoid silent prod misconfiguration.",
+    "api.ts stores the JWT via storage.secureGet/secureSet, which on web maps to localStorage (XSS-exposed). Acceptable for a mobile-first app that uses SecureStore natively, but worth documenting the risk for the web preview build.",
+    "verify_code has correct delete_one on expiry, on attempts>=5, and on successful verify — no orphan OTP docs.",
+    "list_sessions still lacks an index on {profile_id:1, timestamp:-1}; carried over from iteration 2 review."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_talktally.py (NEW - 10 auth tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 pytest: 10 new auth + 10 regression)",
+    "frontend": "100% for the 4 requested E2E flows (login->onboarding via OTP, home greeting after onboarding, sign-out clears JWT + routes to /login, wrong-OTP shows 'Invalid code'). 1 medium UI bug (OTP box overflow) does not block the flow."
+  },
+  "seed_data_creation": "Created ~7 users in db.users via /api/auth/verify-code during tests (emails: test_verify_ok@talktally.dev, test_wrong_code@talktally.dev, test_expired@talktally.dev, e2e_full+<ts>@talktally.dev, tester+e2e@talktally.dev, otp_shape_check@talktally.dev). Created several profiles/sessions from the regression suite (TEST_ prefix) and 1 onboarding profile ('Testy', 12-18M). All inert; no cleanup endpoints exist.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Auth suite is stable and idempotent per-run (creates unique users, no cleanup needed). If the '.local' email policy is relaxed, add a case to TestAuthRequestCode using an @<x>.local address. If the OTP overflow fix is applied, assert all 6 [data-testid=otp-N] boxes are visible with bounding-box widths within 5px of each other on a 375px viewport. Backend log path used for OTP retrieval: /var/log/supervisor/backend.err.log with format '[TalkTally OTP] <email> -> <6-digit>'.",
+  "rca_of_issue": "OTP box overflow RCA: In /app/frontend/app/login.tsx line 166, `maxLength={i === 0 ? 6 : 1}` is set to allow pasting a full 6-digit code into the first box. In React Native Web this renders as <input maxlength=6>, which combined with the flex-row lacking `minWidth: 0` on children prevents flex:1 from shrinking the first input below its content-derived intrinsic width. Result: the first box takes most of the row width and the remaining 5 are pushed off-screen. Fix: either drop the special-case maxLength (onDigit already handles paste when v.length>1 at lines 82–90) OR add `minWidth: 0` to the otpBox StyleSheet. The E2E test still passes because Playwright fills each input by testID directly, bypassing on-screen visibility."
+}

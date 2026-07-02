@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, shadow } from "@/src/theme";
 import { PHONEME_CATEGORIES, ageCohortMinMonths } from "@/src/data/phonemes";
 import { api, SessionSummary } from "@/src/api";
+import { storage } from "@/src/utils/storage";
 
 type Tab = "syllabus" | "history";
 
@@ -120,11 +121,14 @@ export default function Home() {
             testID="edit-profile-button"
             onPress={async () => {
               await AsyncStorage.multiRemove(["talktally.profileId", "talktally.profileName", "talktally.profileCohort"]);
-              router.replace("/onboarding");
+              await storage.secureRemove("talktally.jwt");
+              await storage.removeItem("talktally.userEmail");
+              await storage.removeItem("talktally.userId");
+              router.replace("/login");
             }}
             style={styles.editBtn}
           >
-            <Ionicons name="settings-outline" size={20} color={colors.onSurface} />
+            <Ionicons name="log-out-outline" size={20} color={colors.onSurface} />
           </Pressable>
         </View>
 

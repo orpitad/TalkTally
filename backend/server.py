@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,11 +9,15 @@ import tempfile
 import logging
 import difflib
 import re
+import random
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from passlib.context import CryptContext
 
 from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
 
@@ -26,6 +31,12 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-me")
+JWT_ALGO = os.environ.get("JWT_ALGORITHM", "HS256")
+JWT_TTL_DAYS = 90
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer(auto_error=False)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -91,6 +102,51 @@ class TranscribeResponse(BaseModel):
     correct: bool
 
 
+# ---------- Auth ----------
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserOut
+
+
+def _create_token(user_id: str) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(days=JWT_TTL_DAYS)
+    return jwt.encode({"sub": user_id, "exp": exp}, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing credentials")
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGO])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
 # ---------- Utilities ----------
 def _normalize(text: str) -> str:
     return re.sub(r"[^a-z]", "", (text or "").lower())
@@ -114,6 +170,76 @@ def _score_match(transcript: str, target: str) -> int:
 @api_router.get("/")
 async def root():
     return {"message": "TalkTally API", "status": "ok"}
+
+
+@api_router.post("/auth/request-code")
+async def request_code(payload: EmailRequest):
+    email = payload.email.lower().strip()
+    code = f"{random.randint(0, 999999):06d}"
+    code_hash = pwd_context.hash(code)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    await db.otp_requests.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email": email,
+                "code_hash": code_hash,
+                "expires_at": expires_at.isoformat(),
+                "attempts": 0,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True,
+    )
+    logger.warning(f"[TalkTally OTP] {email} -> {code}")
+    return {"message": "Code sent. Check backend logs (dev mode)."}
+
+
+@api_router.post("/auth/verify-code", response_model=AuthResponse)
+async def verify_code(payload: VerifyRequest):
+    email = payload.email.lower().strip()
+    code = (payload.code or "").strip()
+    otp = await db.otp_requests.find_one({"email": email}, {"_id": 0})
+    if not otp:
+        raise HTTPException(status_code=400, detail="No code requested for this email")
+
+    try:
+        expires_at = datetime.fromisoformat(otp["expires_at"])
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+    except Exception:
+        expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+    if datetime.now(timezone.utc) > expires_at:
+        await db.otp_requests.delete_one({"email": email})
+        raise HTTPException(status_code=400, detail="Code expired. Please request a new one.")
+
+    if otp.get("attempts", 0) >= 5:
+        await db.otp_requests.delete_one({"email": email})
+        raise HTTPException(status_code=400, detail="Too many attempts. Please request a new code.")
+
+    if not pwd_context.verify(code, otp["code_hash"]):
+        await db.otp_requests.update_one({"email": email}, {"$inc": {"attempts": 1}})
+        raise HTTPException(status_code=400, detail="Invalid code")
+
+    await db.otp_requests.delete_one({"email": email})
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(dict(user))
+
+    token = _create_token(user["id"])
+    return AuthResponse(token=token, user=UserOut(**user))
+
+
+@api_router.get("/auth/me", response_model=UserOut)
+async def me(user=Depends(get_current_user)):
+    return UserOut(**user)
 
 
 @api_router.post("/profiles", response_model=Profile)
