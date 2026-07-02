@@ -1,0 +1,189 @@
+{
+  "app_name": "TalkTally",
+  "personality": "4 Tactile / Playful LIGHT",
+  "personality_one_liner": "A warm, tactile, and deeply engaging playground that feels like a premium educational wooden toy, balancing clinical trust for parents with playful delight for toddlers.",
+  "color": {
+    "surface": "#FDFBF7",
+    "onSurface": "#2A2A2E",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#2A2A2E",
+    "surfaceTertiary": "#F3EFE6",
+    "onSurfaceTertiary": "#2A2A2E",
+    "surfaceInverse": "#2A2A2E",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#FF8A65",
+    "brandPrimary": "#FF8A65",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#64B5F6",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#FFE0B2",
+    "onBrandTertiary": "#D84315",
+    "success": "#81C784",
+    "onSuccess": "#FFFFFF",
+    "warning": "#FFD54F",
+    "onWarning": "#5C4000",
+    "error": "#E57373",
+    "onError": "#FFFFFF",
+    "info": "#4FC3F7",
+    "onInfo": "#FFFFFF",
+    "border": "#EAE6DF",
+    "borderStrong": "#D1CCC2",
+    "divider": "#F3EFE6"
+  },
+  "typography": {
+    "displayFontFamily": "Fredoka",
+    "textFontFamily": "Nunito",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use chunky, oversized padding to make targets easy for toddlers. Ensure generous margins around cards so they feel like physical objects resting on the surface.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "pill": 999
+  },
+  "shadow_tier": 2,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use subtle glass effect on sticky bottom tabs to let the vibrant card colors peek through.",
+      "Apply glass blur to sticky headers (e.g., the parent coaching tip) over scrolling flashcards."
+    ],
+    "dont's": [
+      "Avoid heavy blur on primary interaction buttons.",
+      "Do not use glass inside the main flashcard canvas, keep foreground illustrations sharp and solid."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Onboarding",
+      "purpose": "Create child profile and select age cohort to tailor phoneme milestones.",
+      "states": {
+        "loading": "Centered bouncing alphabet block.",
+        "empty": "N/A",
+        "error": "Soft red banner stating 'Oops, couldn't save profile' with a retry button."
+      },
+      "layout": "Large rounded text inputs for child's name. A horizontally scrolling carousel of oversized, pill-shaped cards for age cohorts (12-18M, 18-24M, etc.) with large typography. A sticky, chunky 'Continue' button at the bottom."
+    },
+    {
+      "name": "Home Dashboard",
+      "purpose": "Parent's control center containing Syllabus (milestones) and History (past sessions).",
+      "states": {
+        "loading": "Skeleton cards with soft pulsing opacity.",
+        "empty": "Illustration of a sleeping bear with text 'No sessions yet. Let's start practicing!'",
+        "error": "Error message with a cute 'uh-oh' mascot and Retry CTA."
+      },
+      "layout": "Top section features the child's avatar and an intelligent recommendation card (frosted glass over colorful gradient). Below, a chunky segmented control switches between 'Syllabus' and 'History'. Syllabus lists big, tactile flashcard categories. History shows rounded list rows with progress bars."
+    },
+    {
+      "name": "Room Calibration",
+      "purpose": "Measure background noise before session to calibrate the AI Whisper scoring.",
+      "states": {
+        "loading": "Connecting to microphone...",
+        "empty": "N/A",
+        "error": "Microphone permission denied message."
+      },
+      "layout": "Centered playful visualizer (a sleeping character or soft pulse ring) that expands with background noise. Text 'Shh... Let's listen to the room' in large Fredoka font. A big, raised 'Calibrate' pill button at the bottom."
+    },
+    {
+      "name": "Flashcard Practice",
+      "purpose": "The core learning interface where the child practices pronunciation and gets recorded.",
+      "states": {
+        "loading": "Fetching next card...",
+        "empty": "N/A",
+        "error": "Failed to load audio."
+      },
+      "layout": "Parent coaching tip pinned at the top. A massive, central 3D-like card showcasing the target image (e.g., BALL) and word in bold Fredoka. Below the card, a giant circular 'Record' button. While recording, the button turns into a pulsing 'Sound Bubble' visualizer. After recording, two chunky, colorful buttons appear: 'Correct' (Green) and 'Skip' (Yellow)."
+    },
+    {
+      "name": "Scoreboard",
+      "purpose": "Celebrate session completion and show parent the accuracy score.",
+      "states": {
+        "loading": "Tallying scores...",
+        "empty": "N/A",
+        "error": "Failed to save session."
+      },
+      "layout": "Celebratory animations (confetti/stars). A massive central score metric (e.g., '80%') surrounded by a soft glowing ring. Milestones hit listed as small badges. A sticky 'Complete Lesson' button at the bottom."
+    },
+    {
+      "name": "History Detail",
+      "purpose": "Review past session words and playback the recorded audio attempts.",
+      "states": {
+        "loading": "Loading session data...",
+        "empty": "No recordings found for this session.",
+        "error": "Error loading audio clips."
+      },
+      "layout": "List of chunky card rows. Each row displays the target word, the phoneme icon, a score indicator, and a prominent 'Play' button to hear the child's recording. Simple, one-step playback interactions."
+    }
+  ],
+  "images": {
+    "child_avatar": {
+      "url": "https://images.pexels.com/photos/14941957/pexels-photo-14941957.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Cute portrait of a curly-haired toddler smiling indoors"
+    },
+    "flashcard_ball": {
+      "url": "https://images.unsplash.com/photo-1593375547411-03d7a649be66?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHw0fHxjb2xvcmZ1bCUyMHJ1YmJlciUyMGJhbGwlMjB0b3l8ZW58MHx8fHwxNzgyMjIzNTY1fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Colorful red rubber ball on white surface"
+    },
+    "flashcard_dog": {
+      "url": "https://images.pexels.com/photos/12475794/pexels-photo-12475794.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Cute golden retriever puppy lying on lush green grass"
+    },
+    "flashcard_bear": {
+      "url": "https://images.pexels.com/photos/15130371/pexels-photo-15130371.jpeg",
+      "alt": "A cute soft teddy bear plush toy"
+    },
+    "splash_hero": {
+      "url": "https://images.pexels.com/photos/12969055/pexels-photo-12969055.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Close-up of wooden alphabet blocks arranged with a green background"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Design strictly following the 'Tactile / Playful' personality. Do not use generic AI-looking dark UI. Emphasize a soft, chunky, friendly interface.",
+    "Typography MUST use 'Fredoka' for headings/display text (gives a playful, toy-like feel) and 'Nunito' for body/coaching text. Both loaded via expo-font. Do not use any @expo-google-fonts packages.",
+    "Flashcard visuals should be large and central. When a user taps 'Record', transform the button into a playful, expanding 'Sound Bubble' visualizer to give immediate, toddler-friendly feedback.",
+    "Ensure all buttons are oversized (minimum 56pt height) to accommodate both parents carrying toddlers and toddlers tapping themselves.",
+    "Implement haptics on card flips, tab changes, and correct/skip scoring actions (React Native Haptics) to enhance the tactile sensation.",
+    "On the Home Dashboard, ensure the recommendation card uses a frosted glass overlay with a vibrant background gradient or image, per <Glassmorphism_and_Blur> rules.",
+    "Whenever a card or button sits on the background, enforce a Shadow Tier 2 to give it physical 'lift' like a physical flashcard resting on a table."
+  ],
+  "haptics": {
+    "events": {
+      "tab_press": "light",
+      "record_start": "medium",
+      "record_stop": "medium",
+      "score_correct": "success",
+      "score_skip": "light",
+      "lesson_complete": "success"
+    }
+  }
+}
