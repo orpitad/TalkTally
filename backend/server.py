@@ -170,7 +170,7 @@ async def list_sessions(profile_id: str):
     cursor = db.sessions.find(
         {"profile_id": profile_id},
         {"_id": 0, "targets": 0},
-    ).sort("timestamp", -1)
+    ).sort("timestamp", -1).limit(100)
     return [SessionSummary(**doc) async for doc in cursor]
 
 
