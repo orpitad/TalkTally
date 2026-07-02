@@ -1,0 +1,46 @@
+{
+  "summary": "First end-to-end test iteration for TalkTally. All 10 backend pytest tests PASS (health, profiles CRUD + 404, sessions CRUD, list ordering, list excludes _id+targets, session detail with audio, transcribe validation). Frontend E2E on mobile viewport PASSES for onboarding → home → history-empty → calibrate flow; all required testIDs render. CRITICAL BACKEND BUG discovered via backend logs: POST /api/transcribe always returns 500 because server.py:203 passes `file=tmp_path` (a str) to OpenAISpeechToText.transcribe, but emergentintegrations requires bytes / io.IOBase / PathLike / tuple. Whisper transcription is currently non-functional. Frontend deprecation warning noted: shadow* style props (RN Web) — non-blocking.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/transcribe",
+        "issue": "Always fails with 500 'Failed to transcribe audio: ... Expected entry at file to be bytes, an io.IOBase instance, PathLike or a tuple but received <class str>'. Root cause: backend/server.py line 203 passes `file=tmp_path` where tmp_path is a plain string. Fix: pass `file=Path(tmp_path)` (PathLike) OR open in binary and pass the file handle, e.g. `with open(tmp_path, 'rb') as f: response = await stt.transcribe(file=f, ...)`.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global (react-native-web)", "issues": ["Console warning: 'shadow*' style props are deprecated. Use 'boxShadow'. Emitted from src/theme shadow presets used in onboarding/home/calibrate. Non-blocking but should migrate to boxShadow for RN 0.76+/web."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_talktally_api.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/transcribe: change `stt.transcribe(file=tmp_path, ...)` in backend/server.py to pass a PathLike or an open binary file handle. Example: `from pathlib import Path` and `response = await stt.transcribe(file=Path(tmp_path), model='whisper-1', ...)` — or use `with open(tmp_path, 'rb') as f: ...`. Re-verify with real base64 audio from the app after fix.",
+    "Optional cleanup: migrate `shadow*` style props (in src/theme) to `boxShadow` to silence RN Web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py transcribe(): tempfile path passed as str is incompatible with emergentintegrations OpenAISpeechToText. Cover this in a unit test once fixed.",
+    "server.py transcribe(): consider returning 400 (not 500) when audio bytes are empty/invalid, so client can distinguish user input error from server error.",
+    "api.ts uses process.env.EXPO_PUBLIC_BACKEND_URL correctly; no hardcoded fallback (good, fails fast).",
+    "server.py excludes _id in projections correctly for GET endpoints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/test_talktally_api.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10 pytest, but /transcribe endpoint functionally broken per backend logs)", "frontend": "100% (onboarding + home + history + calibrate flow)"},
+  "seed_data_creation": "Tests create TEST_-prefixed profiles and sessions in MongoDB. Not cleaned up (no delete endpoint exists). Safe: uses uuid ids and TEST_ name prefix.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After /transcribe fix, re-run pytest and update TestTranscribe.test_transcribe_synthetic_wav to require status_code == 200 (with contract shape). Synthetic 1s 440Hz sine WAV is generated in test file. Frontend flow is stable; use it as-is for regression.",
+  "rca_of_issue": "POST /api/transcribe RCA — Reproduction: send any valid base64 audio + ext=wav to /api/transcribe. Observed 500 with detail 'Failed to transcribe audio: ... received <class str>'. Cause: emergentintegrations.openai.speech_to_text.OpenAISpeechToText.transcribe(file=...) forwards `file` directly to litellm/openai SDK which requires bytes/IOBase/PathLike/tuple; a raw `str` filename is rejected. Mitigation: wrap tmp_path in pathlib.Path (PathLike) or open in binary mode and pass file handle."
+}
