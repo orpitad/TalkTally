@@ -200,7 +200,10 @@ async def transcribe(payload: TranscribeRequest):
             tmp.write(audio_bytes)
             tmp_path = tmp.name
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-        response = await stt.transcribe(file=tmp_path, model="whisper-1", response_format="json", language="en")
+        with open(tmp_path, "rb") as audio_file:
+            response = await stt.transcribe(
+                file=audio_file, model="whisper-1", response_format="json", language="en"
+            )
         # response is a dict-like from litellm
         transcript_text = ""
         if isinstance(response, dict):
