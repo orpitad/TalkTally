@@ -20,7 +20,9 @@
         "backgroundColor": "#FDFBF7"
       },
       "edgeToEdgeEnabled": true,
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -43,7 +45,8 @@
         {
           "microphonePermission": "Record your child's voice for speech practice"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

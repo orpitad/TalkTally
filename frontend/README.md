@@ -1,50 +1,88 @@
-# Welcome to your Expo app 👋
+# TalkTally Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo/React Native mobile client for TalkTally. Use Expo Go on a phone for local testing.
 
-## Get started
+## Environment
 
-1. Install dependencies
+Create `frontend/.env` from `frontend/.env.example`.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```env
+EXPO_PUBLIC_BACKEND_URL=http://YOUR_LAPTOP_LAN_IP:8001
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+For this machine right now, the detected Wi-Fi IP is:
 
-## Learn more
+```env
+EXPO_PUBLIC_BACKEND_URL=http://192.168.10.45:8001
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Use the laptop LAN IP, not `localhost`, because Expo Go runs on your phone.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Run Locally On A Phone
 
-## Join the community
+From repo root:
 
-Join our community of developers creating universal apps.
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+In another terminal:
+
+```powershell
+cd frontend
+npm install
+npm run start
+```
+
+Then open Expo Go on your phone and scan the QR code from the terminal/browser.
+
+## Troubleshooting: App Won't Load In Expo Go (Windows)
+
+On Windows, the most common cause is **Windows Defender Firewall blocking inbound
+connections to Metro (port 8081)**. The dev server binds to `0.0.0.0:8081`, so it
+works from `localhost` on the laptop (loopback bypasses the firewall) but the phone's
+connection is silently dropped — Expo Go hangs on "Downloading" or times out.
+
+Fix: open **PowerShell as Administrator** and add inbound rules once:
+
+```powershell
+netsh advfirewall firewall add rule name="Expo Metro 8081" dir=in action=allow protocol=TCP localport=8081 profile=private,domain
+netsh advfirewall firewall add rule name="TalkTally Backend 8001" dir=in action=allow protocol=TCP localport=8001 profile=private,domain
+```
+
+The first rule lets Expo Go download the bundle; the second lets the phone reach the
+backend API. Then restart Metro with `npx expo start --lan --clear`.
+
+Other things to check:
+- Phone and laptop are on the **same Wi-Fi** (and the same band/SSID).
+- The router doesn't have **AP/client isolation** enabled (blocks device-to-device traffic).
+- `EXPO_PUBLIC_BACKEND_URL` uses the laptop's current LAN IP (run `ipconfig`), not `localhost`.
+- From the phone's browser, `http://<LAPTOP_LAN_IP>:8081/status` should return
+  `packager-status:running`. If it doesn't, it's a network/firewall issue, not the app.
+- Tunnel mode (`npx expo start --tunnel`) bypasses LAN entirely, but relies on ngrok and
+  can time out (`ngrok tunnel took too long to connect`) — fix the firewall/LAN route first.
+
+## Backend Requirements
+
+The backend also needs `backend/.env`:
+
+```env
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=talktally
+GROQ_API_KEY=
+JWT_SECRET_KEY=replace-with-64-hex-character-secret
+JWT_ALGORITHM=HS256
+```
+
+Install/start MongoDB locally or replace `MONGO_URL` with a MongoDB Atlas URI.
+
+`GROQ_API_KEY` is required for real pronunciation transcription. Login, onboarding, profile, and session flows can run without it, but recording transcription returns `GROQ_API_KEY missing` until you add a real key and restart the backend.
+
+## Sign In During Local Testing
+
+1. Enter any email in the app.
+2. Watch the backend terminal for a line like `[TalkTally OTP] parent@example.com -> 123456`.
+3. Enter that 6-digit code in Expo Go.

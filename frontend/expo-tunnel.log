@@ -1,0 +1,6 @@
+env: load .env
+env: export EXPO_PUBLIC_BACKEND_URL
+Starting project at C:\Users\acer\Desktop\TalkTally\frontend
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+CommandError: ngrok tunnel took too long to connect.
